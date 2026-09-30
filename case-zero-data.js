@@ -105,7 +105,7 @@ const COMP = {
 
   /* ---- Limbs (outputs) ---- */
   led5:    { name: 'LED 5mm', role: 'limbs', pins: { d: 1 }, wire: 'led', sim: 'glow', mA: 10, min: 4, variants: [
-             V('5mm LED + resistor kit', 'save', [['az', 6.99, 100, '5mm LED assortment kit with resistors'], ['dk', 0.3, 1, '5mm LED through hole']], { solder: true }) ] },
+             V('5mm LED assortment', 'save', [['az', 6.99, 100, '5mm LED assortment kit with resistors'], ['dk', 0.3, 1, '5mm LED through hole']], { solder: true }) ] },
   strip:   { name: 'LED strip (WS2812B)', role: 'limbs', pins: { d: 1 }, wire: 'strip', sim: 'strip', mA: 300, min: 15, note: 'Full white on 60 LEDs can pull 3.6A. 300mA is a typical animation.', variants: [
              V('WS2812B strip 1m / 60 LEDs', 'save', [['az', 11.99, 1, 'WS2812B LED strip 1m 60 LEDs']]) ] },
   speaker: { name: 'Speaker 40mm', role: 'limbs', wire: 'speaker', sim: 'sound', min: 5, variants: [
@@ -240,7 +240,7 @@ const FUNCS = [
   ['power', 'Heavy apps (desktop, local AI)', 'heavy apps', 'brain'],
   ['battery', 'Run on battery', 'battery power', 'heart']
 ].map(([id, label, short, role]) => ({ id, label, short, role }));
-const WEIGHT = { dsp: 2, video: 2, power: 2 };
+const WEIGHT = { dsp: 4, video: 2, power: 2 };
 const CONNS = [['none', 'Nothing'], ['usb', 'USB'], ['wifi', 'Wi-Fi'], ['bt', 'Bluetooth'], ['usb+bt', 'USB + Bluetooth'], ['wifi+bt', 'Wi-Fi + Bluetooth']];
 const BUDGETS = [[1, '$', 'Basic'], [2, '$$', 'Affordable'], [3, '$$$', 'More capable'], [4, '$$$$', 'Advanced'], [5, '$$$$$', 'Go wild']];
 
@@ -339,3 +339,124 @@ const PRESETS = {
   'scratch':         { cat: 'Start from scratch', name: 'I Have an Idea', desc: 'Start blank. Pick what it should do and we suggest the rest.',
                        funcs: ['buttons', 'display'], conn: 'usb', budget: 2, style: 'briefcase', panel: null }
 };
+
+/* --------------------------------------------------------------------------
+   WORKBENCH — what the parts tray offers, with beginner descriptions
+   kind 'fp' = goes on a panel, 'comp' = lives inside, 'heart' = battery
+   -------------------------------------------------------------------------- */
+const TRAY = [
+  { role: 'senses', items: [
+    ['fp', 'tact12',   'Button',        'button',   'A push button. The brain feels every press.'],
+    ['fp', 'pot',      'Knob',          'knob',     'Turn it and the brain reads a number from 0 to 100%.'],
+    ['fp', 'slidepot', 'Slider',        'slider',   'Push it up or down to change a value smoothly.'],
+    ['fp', 'encoder',  'Endless knob',  'encoder',  'A knob that turns forever and clicks. Great for menus.'],
+    ['fp', 'toggle',   'Flip switch',   'toggle',   'A switch that stays on or off.'],
+    ['fp', 'thumb',    'Thumbstick',    'thumb',    'A small stick like a game controller. It tells the brain how far you push.'],
+    ['fp', 'dpad',     'D-pad',         'dpad',     'A plus-shaped direction pad made from four tiny buttons.'],
+    ['fp', 'joystick', 'Arcade stick',  'joystick', 'An arcade stick. Four switches inside tell the brain up, down, left and right.'],
+    ['fp', 'arcade30', 'Big button',    'button',   'One big 30mm arcade button. Made to be smacked.'],
+    ['fp', 'cluster6', '6 arcade buttons', 'buttons', 'Six arcade buttons in a block, like a fight stick.'],
+    ['fp', 'pad',      'Drum pad',      'pad',      'A piezo disc under the pad feels how hard you hit it.'],
+    ['fp', 'footsw',   'Foot switch',   'footswitch', 'A heavy switch you stomp on, like on a guitar pedal.'],
+    ['fp', 'kbd',      'Mini keyboard', 'keyboard', 'A small keyboard for typing. Needs a Linux brain.'],
+    ['comp', 'mic',    'Microphone',    'mic',      'Lets the device hear you.'],
+    ['comp', 'soil',   'Soil sensor',   'sensor',   'Pokes into a plant pot and tells the brain how wet the soil is.'],
+    ['comp', 'bme280', 'Temp sensor',   'sensor',   'Feels temperature, humidity and air pressure.'] ] },
+  { role: 'limbs', items: [
+    ['fp', 'led5',    'Light',          'led',      'A small light the brain can turn on, off or blink.'],
+    ['fp', 'oled',    'Tiny screen',    'screen',   'A small sharp screen for words and simple graphics.'],
+    ['fp', 'tft24',   'Color screen',   'screen',   'A 2.4-inch color screen for menus, pictures and games.'],
+    ['fp', 'tft35',   'Bigger screen',  'screen',   'A 3.5-inch color screen.'],
+    ['fp', 'hdmi5',   '5-inch screen',  'screen',   'Shows a full computer desktop. Needs a Linux brain.'],
+    ['fp', 'speaker', 'Speaker',        'speaker',  'Lets the device talk and play sound. We add the small amp it needs.'],
+    ['fp', 'jack',    'Audio jack',     'jack',     'A 1/4-inch plug for guitars, headphones or amps.'],
+    ['comp', 'strip', 'LED strip',      'strip',    'A strip of 60 color lights the brain controls one by one.'] ] },
+  { role: 'heart', items: [
+    ['heart', 'lipo',   'LiPo battery', 'battery', 'A flat rechargeable battery. Charges over USB-C.'],
+    ['heart', 'aa4',    'AA batteries', 'battery', 'Holds four AA batteries. Easy to swap.'],
+    ['heart', 'cell18', '18650 battery','battery', 'One big rechargeable cell for long run times.'],
+    ['fp', 'usbc',      'USB-C port',   'usb',     'A USB-C port on the outside of the case for power and code.'] ] }
+];
+/* Things the brain might need that aren't a physical part */
+const EXTRAS = [['dsp', 'Live audio effects'], ['midi', 'MIDI'], ['storage', 'Save files'], ['power', 'Heavy apps (desktop, local AI)'], ['hid', 'Act as keyboard / gamepad']];
+const ANALOGY = {
+  senses: 'This is a sense. It tells the brain what is happening.',
+  limbs: 'This is a limb. The brain uses it to act.',
+  heart: 'This is the heart. It keeps everything alive.',
+  brain: 'This is the brain. Every nerve runs back to it.'
+};
+
+/* --------------------------------------------------------------------------
+   v0.6 — ORDERING
+   Store details, overseas options, and the things people forget to buy.
+   -------------------------------------------------------------------------- */
+Object.assign(STORES.az, { days: '1–3 days', overseas: false });
+Object.assign(STORES.dk, { days: '2–4 days', overseas: false });
+STORES.lcsc = { name: 'LCSC', days: '7–15 days', overseas: true, url: q => `https://www.lcsc.com/search?q=${encodeURIComponent(q)}` };
+STORES.ali  = { name: 'AliExpress', days: '10–25 days', overseas: true, url: q => `https://www.aliexpress.us/w/wholesale-${encodeURIComponent(q.replace(/\s+/g, '-'))}.html` };
+Object.assign(CZ_CONFIG.shipping, { lcsc: 9, ali: 0 });
+/* US imports no longer have a duty-free limit. Overseas prices get this added
+   so comparisons stay honest; the store checkout shows the real charge. */
+CZ_CONFIG.importEstimate = 0.30;
+
+/* Overseas price estimates: [store, price, pack, search]. Batteries are left out
+   because shipping lithium cells from overseas is restricted and slow. */
+const OVERSEAS = {
+  esp32s3: [['ali', 7, 1, 'ESP32-S3 N16R8 development board']],
+  tact12: [['ali', 3.5, 20, '12mm momentary push button']], tact6: [['ali', 1.5, 100, '6x6 tactile switch'], ['lcsc', 0.03, 1, 'TS-1187A tactile switch']],
+  arcade24: [['ali', 5, 10, '24mm arcade button']], arcade30: [['ali', 6, 10, '30mm arcade button']], joystick: [['ali', 6, 1, 'arcade joystick 8 way']],
+  thumb: [['ali', 3, 5, 'PS2 joystick module']], pot: [['ali', 4, 10, '10k potentiometer knob kit'], ['lcsc', 0.6, 1, 'RV09 10k potentiometer']],
+  encoder: [['ali', 3, 5, 'EC11 rotary encoder'], ['lcsc', 0.5, 1, 'EC11 rotary encoder']], slidepot: [['ali', 4, 4, '45mm slide potentiometer']],
+  toggle: [['ali', 3, 10, 'mini toggle switch SPDT']], footsw: [['ali', 6, 5, '3PDT footswitch']], piezo: [['ali', 2, 20, '27mm piezo disc']],
+  mic: [['ali', 3.5, 3, 'INMP441 I2S microphone']], soil: [['ali', 3.5, 5, 'capacitive soil moisture sensor']], bme280: [['ali', 4, 3, 'BME280 module']],
+  mux16: [['ali', 3, 5, 'CD74HC4067 module']], ads1115: [['ali', 4, 3, 'ADS1115 module']],
+  led5: [['ali', 2.5, 100, '5mm LED kit'], ['lcsc', 0.03, 1, '5mm LED']], strip: [['ali', 5, 1, 'WS2812B 1m 60 LED strip']],
+  speaker: [['ali', 4, 4, '40mm 3W 4 ohm speaker']], amp: [['ali', 3.5, 3, 'MAX98357A module']], codec: [['ali', 8, 1, 'WM8960 audio module']],
+  oled: [['ali', 3.5, 1, '1.3 inch OLED I2C SH1106']], tft24: [['ali', 6, 1, '2.4 inch TFT ILI9341 SPI']], tft35: [['ali', 9, 1, '3.5 inch TFT ILI9488 SPI']],
+  hdmi5: [['ali', 25, 1, '5 inch HDMI display 800x480']], jack: [['ali', 3.5, 10, '6.35mm mono jack']], usbc: [['ali', 4, 5, 'USB-C panel mount extension']],
+  charger: [['ali', 3, 10, 'TP4056 USB-C module']], boost: [['ali', 5, 2, '5V 2A boost charger module']], sdmod: [['ali', 3, 5, 'micro SD card module SPI']],
+  hookup: [['ali', 7, 1, '22AWG solid wire kit']], perf: [['ali', 4, 10, 'double sided perfboard']], headers: [['ali', 2, 20, '2.54mm male pin header'], ['lcsc', 0.1, 1, '2.54mm 1x40 pin header']],
+  breadboard: [['ali', 4, 3, '830 point breadboard']], jumpers: [['ali', 3, 1, 'dupont jumper wire set']],
+  magnet: [['ali', 5, 10, '20x3mm neodymium magnet']], disc: [['ali', 3, 20, '20mm steel disc']], hinge: [['ali', 3.5, 10, 'small brass hinge 25mm']],
+  latch: [['ali', 4, 4, 'mini toggle latch']], handle: [['ali', 4, 2, 'leather strap handle']], lock: [['ali', 4.5, 2, 'mini hasp lock key']],
+  stay: [['ali', 4, 2, 'lid support hinge']], feet: [['ali', 2, 100, 'adhesive rubber feet']], screws: [['ali', 6, 1, 'M3 brass standoff kit']],
+  reskit: [['ali', 3, 1, 'resistor assortment kit']], usbMicro: [['ali', 3, 1, 'micro USB data cable']], usbC: [['ali', 3, 1, 'USB-C data cable']], sdreader: [['ali', 3, 1, 'USB micro SD card reader']]
+};
+
+/* Things people forget until the box shows up. Added automatically, with the reason. */
+Object.assign(COMP, {
+  reskit:   { name: 'Resistor kit', role: 'nerves', forgot: true, min: 0, variants: [V('Resistor assortment (includes 330Ω and 1MΩ)', 'save', [['az', 7.99, 1, 'resistor assortment kit 1/4W'], ['dk', 9.95, 1, 'resistor kit assortment through hole']])] },
+  usbMicro: { name: 'Micro-USB data cable', role: 'heart', forgot: true, min: 0, variants: [V('Micro-USB cable that carries data', 'save', [['az', 6.99, 2, 'micro USB data sync cable'], ['dk', 3.95, 1, 'micro USB cable data']])] },
+  usbC:     { name: 'USB-C data cable', role: 'heart', forgot: true, min: 0, variants: [V('USB-C cable that carries data', 'save', [['az', 7.99, 2, 'USB-C data cable'], ['dk', 4.95, 1, 'USB C to A cable data']])] },
+  psuPi5:   { name: 'Pi 5 power supply', role: 'heart', forgot: true, min: 0, variants: [V('Official 27W USB-C supply (5V 5A)', 'bal', [['dk', 12, 1, 'Raspberry Pi 27W USB-C power supply'], ['az', 14, 1, 'Raspberry Pi 27W USB-C power supply']])] },
+  psuZero:  { name: 'Zero power supply', role: 'heart', forgot: true, min: 0, variants: [V('Official micro-USB supply (5.1V 2.5A)', 'bal', [['dk', 8, 1, 'Raspberry Pi micro USB power supply 2.5A'], ['az', 10, 1, 'Raspberry Pi micro USB power supply 2.5A']])] },
+  miniHdmi: { name: 'Mini-HDMI cable', role: 'nerves', forgot: true, min: 0, variants: [V('Mini-HDMI to HDMI cable', 'save', [['az', 7.99, 1, 'mini HDMI to HDMI cable short'], ['dk', 6.95, 1, 'mini HDMI to HDMI cable']])] },
+  microHdmi:{ name: 'Micro-HDMI cable', role: 'nerves', forgot: true, min: 0, variants: [V('Micro-HDMI to HDMI cable', 'save', [['az', 7.99, 1, 'micro HDMI to HDMI cable short'], ['dk', 6.95, 1, 'Raspberry Pi micro HDMI cable']])] },
+  sdreader: { name: 'microSD card reader', role: 'tools', forgot: true, min: 0, variants: [V('USB microSD reader (to install the operating system)', 'save', [['az', 7.99, 1, 'USB micro SD card reader']])] }
+});
+for (const [id, rows] of Object.entries(OVERSEAS)) if (COMP[id]) COMP[id].variants.forEach(v => { v.src = v.src.concat(rows); });
+
+/* Which USB cable each brain needs, and where to go for code + simulation. */
+const BOARD_TOOLS = {
+  pico2:   { usb: 'usbMicro', lang: 'MicroPython', sim: 'https://wokwi.com/projects/new/micropython-pi-pico', simNote: 'Wokwi simulates the original Pico. Your code runs the same on a Pico 2.',
+             setup: [['Put MicroPython on your Pico', 'https://www.raspberrypi.com/documentation/microcontrollers/micropython.html'], ['Get Thonny, a free beginner code editor', 'https://thonny.org']] },
+  pico2w:  { usb: 'usbMicro', lang: 'MicroPython', sim: 'https://wokwi.com/projects/new/micropython-pi-pico-w', simNote: 'Wokwi simulates the original Pico W. Your code runs the same on a Pico 2 W.',
+             setup: [['Put MicroPython on your Pico', 'https://www.raspberrypi.com/documentation/microcontrollers/micropython.html'], ['Get Thonny, a free beginner code editor', 'https://thonny.org']] },
+  esp32s3: { usb: 'usbC', lang: 'MicroPython', sim: 'https://wokwi.com/projects/new/micropython-esp32-s3',
+             setup: [['Download MicroPython for the ESP32-S3', 'https://micropython.org/download/ESP32_GENERIC_S3/'], ['Get Thonny, a free beginner code editor', 'https://thonny.org']] },
+  unor4m:  { usb: 'usbC', lang: 'Arduino', sim: 'https://wokwi.com/projects/new/arduino-uno', simNote: 'Wokwi simulates the classic UNO. Pins match the UNO R4.',
+             setup: [['Get the free Arduino IDE', 'https://www.arduino.cc/en/software']] },
+  unor4w:  { usb: 'usbC', lang: 'Arduino', sim: 'https://wokwi.com/projects/new/arduino-uno', simNote: 'Wokwi simulates the classic UNO. Pins match the UNO R4.',
+             setup: [['Get the free Arduino IDE', 'https://www.arduino.cc/en/software']] },
+  daisy:   { usb: 'usbMicro', lang: 'Daisy (C++)', sim: null,
+             setup: [['Flash ready-made programs from your browser', 'https://github.com/electro-smith/Programmer'], ['Official Daisy example projects', 'https://github.com/electro-smith/DaisyExamples']] },
+  zero2w:  { usb: null, psu: 'psuZero', hdmi: 'miniHdmi', lang: 'Python', sim: null,
+             setup: [['Install Raspberry Pi OS with Raspberry Pi Imager', 'https://www.raspberrypi.com/software/'], ['gpiozero: the easy way to use pins in Python', 'https://gpiozero.readthedocs.io']] },
+  pi5:     { usb: null, psu: 'psuPi5', hdmi: 'microHdmi', lang: 'Python', sim: null,
+             setup: [['Install Raspberry Pi OS with Raspberry Pi Imager', 'https://www.raspberrypi.com/software/'], ['gpiozero: the easy way to use pins in Python', 'https://gpiozero.readthedocs.io']] }
+};
+const PROJECT_SEARCH = [
+  ['Instructables', q => `https://www.instructables.com/search/?q=${encodeURIComponent(q)}`],
+  ['Hackster', q => `https://www.hackster.io/search?q=${encodeURIComponent(q)}`],
+  ['Adafruit Learn', q => `https://learn.adafruit.com/search?q=${encodeURIComponent(q)}`]
+];
