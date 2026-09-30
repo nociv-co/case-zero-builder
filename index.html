@@ -3,569 +3,779 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Case Zero — Creation-First Hardware Builder</title>
+<!-- Site Created & Designed by Jasilyn A. Anderson | NOCIV.CO -->
+<title>Case Zero Builder</title>
 <style>
-  :root{
-    --bg: #101216;
-    --panel: #161920;
-    --panel-2: #1c2029;
-    --border: #292e39;
-    --border-bright: #3a4150;
-    --text: #e7e9ec;
-    --muted: #8b92a0;
-    --accent: #f2a65a;
-    --accent-dim: #7a5a34;
-    --accent-glow: rgba(242, 166, 90, 0.15);
-    --ok: #4ade80;
-    --err: #f2555a;
-    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  }
-  *{ box-sizing: border-box; }
-  html,body{ height:100%; margin:0; }
-  body{
-    background: var(--bg); color: var(--text); font-family: var(--sans);
-    display:flex; justify-content:center; padding: 20px 16px;
-  }
-  .device{
-    width:100%; max-width: 900px; display:flex; flex-direction:column;
-    height: calc(100vh - 40px); background: var(--panel);
-    border: 1px solid var(--border); border-radius: 12px; overflow:hidden;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-  }
-  
-  /* TOP BAR */
-  .bar{ display:flex; align-items:center; gap:12px; padding: 12px 18px; border-bottom: 1px solid var(--border); background: var(--panel-2); }
-  .dot{ width:8px; height:8px; border-radius:50%; background: var(--muted); flex-shrink:0; transition: background .2s; }
-  .dot.ok{ background: var(--ok); box-shadow: 0 0 8px var(--ok); }
-  .dot.err{ background: var(--err); box-shadow: 0 0 8px var(--err); }
-  .bar .device-col{ display:flex; flex-direction:column; }
-  .bar .brand{ font-weight:800; font-size: 13px; letter-spacing: 0.1em; color: var(--accent); }
-  .bar .device-tag{ font-size: 10px; color: var(--muted); font-family: var(--mono); }
-  select#modelSelect{
-    margin-left:auto; background: var(--bg); color: var(--text);
-    border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px;
-    font-family: var(--mono); font-size: 11px;
-  }
+:root{
+  --bg:#101216; --panel:#161920; --panel-2:#1c2029; --border:#292e39; --border-bright:#3a4150;
+  --text:#e7e9ec; --muted:#8b92a0; --accent:#f2a65a; --accent-dim:#7a5a34; --accent-glow:rgba(242,166,90,.15);
+  --ok:#4ade80; --warn:#facc15; --err:#f2555a;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex;justify-content:center;padding:16px}
+.app{width:100%;max-width:980px;background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-height:calc(100vh - 32px)}
+.bar{display:flex;align-items:baseline;gap:10px;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--panel-2)}
+.brand{font-weight:800;font-size:13px;letter-spacing:.12em;color:var(--accent)}
+.tag{font:10px var(--mono);color:var(--muted)}
+.steps{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--border);background:#12141a;overflow-x:auto}
+.stepBtn{flex-shrink:0;background:transparent;color:var(--muted);border:1px solid transparent;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:600;cursor:pointer}
+.stepBtn b{font-family:var(--mono);margin-right:5px;color:var(--accent-dim)}
+.stepBtn.active{background:var(--panel-2);color:var(--accent);border-color:var(--border)}
+.stepBtn.active b{color:var(--accent)}
+main{flex:1;padding:20px;overflow-y:auto}
+.view{display:none}.view.active{display:block}
+h1{font-size:22px;letter-spacing:.04em;margin:0 0 6px}
+.sub{font-size:13px;color:var(--muted);margin:0 0 22px}
+.eyebrow{font:10px var(--mono);letter-spacing:.14em;color:var(--accent);text-transform:uppercase;margin-bottom:8px}
+.card{background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:16px}
+.card h4{margin:0 0 10px;font:11px var(--mono);letter-spacing:.08em;color:var(--accent)}
+.card ul{margin:0;padding-left:18px;font-size:13px;line-height:1.6}
+.stack{display:flex;flex-direction:column;gap:14px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.two{grid-template-columns:1fr}}
 
-  /* NAVIGATION */
-  .czNav{ display:flex; gap:6px; padding:8px 14px; border-bottom:1px solid var(--border); background:#12141a; overflow-x:auto; flex-shrink:0 }
-  .czTab{ flex-shrink:0; background:transparent; color:var(--muted); border:1px solid transparent; border-radius:7px; padding:7px 12px; font-size:12px; font-weight:600; cursor:pointer; transition: all 0.15s ease; }
-  .czTab:hover{ color:var(--text); border-color:var(--border) }
-  .czTab.active{ background:var(--panel-2); color:var(--accent); border-color:var(--border) }
+/* make */
+.cat{margin-bottom:22px}
+.presetGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.preset{background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:14px;cursor:pointer;text-align:left;color:var(--text);font-family:var(--sans);transition:border-color .12s,transform .12s}
+.preset:hover{border-color:var(--accent);transform:translateY(-2px)}
+.preset.sel{border-color:var(--accent);background:var(--accent-glow)}
+.preset .ic{font-size:20px}
+.preset .nm{font-weight:700;font-size:14px;margin:4px 0}
+.preset .ds{font-size:11.5px;color:var(--muted);line-height:1.35}
+.preset.scratch{border-style:dashed;border-color:var(--accent-dim)}
 
-  /* VIEW STACK */
-  .viewStack{ flex:1; min-height:0; overflow:hidden; position: relative; }
-  .czView{ display:none; height:100%; overflow-y:auto; padding:20px; }
-  .czView.active{ display:block; }
+/* define */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+.tile{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);padding:9px 10px;border-radius:6px;font-size:12.5px;cursor:pointer;user-select:none}
+.tile input{accent-color:var(--accent)}
+.tile.on{border-color:var(--accent-dim)}
+.radios{display:flex;flex-wrap:wrap;gap:8px}
+.radio{background:var(--bg);border:1px solid var(--border);padding:8px 13px;border-radius:6px;font:12px var(--mono);color:var(--muted);cursor:pointer}
+.radio.on{border-color:var(--accent);color:var(--accent);background:var(--accent-glow)}
 
-  /* PRESET HUB (WHAT DO YOU WANT TO MAKE?) */
-  .hubHeader{ text-align: center; margin-bottom: 28px; }
-  .hubHeader h1{ font-size: 24px; font-weight: 800; letter-spacing: 0.05em; margin: 0 0 6px 0; color: var(--text); }
-  .hubHeader p{ font-size: 13px; color: var(--muted); margin: 0; }
+/* parts */
+.rec h2{font-size:22px;margin:0 0 4px}
+.rec .spec{font:11px var(--mono);color:var(--muted);margin-bottom:10px}
+.rec .why{font-size:13px;line-height:1.5}
+.warnLine{font-size:12px;color:var(--warn);margin-top:6px}
+table.cmp{width:100%;border-collapse:collapse;font-size:12px}
+.cmp th,.cmp td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--border)}
+.cmp th{font:10px var(--mono);color:var(--accent);text-transform:uppercase}
+.cmp tr.cmpRow{cursor:pointer}.cmp tr.cmpRow:hover td{background:#222631}
+.cmp tr.pick td{background:var(--accent-glow)}
+.meter{height:6px;background:var(--bg);border-radius:3px;overflow:hidden;min-width:60px}
+.meter i{display:block;height:100%;background:var(--accent)}
+.tableWrap{overflow-x:auto}
 
-  .categorySection{ margin-bottom: 24px; }
-  .categoryTitle{ font-size: 11px; font-family: var(--mono); letter-spacing: 0.12em; color: var(--accent); margin-bottom: 10px; text-transform: uppercase; }
-  .presetGrid{ display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
-  .presetCard{
-    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 14px;
-    cursor: pointer; transition: all 0.15s ease; display: flex; flex-direction: column; gap: 6px;
-  }
-  .presetCard:hover{ border-color: var(--accent); transform: translateY(-2px); background: #222631; }
-  .presetIcon{ font-size: 20px; margin-bottom: 2px; }
-  .presetName{ font-weight: 700; font-size: 14px; color: var(--text); }
-  .presetDesc{ font-size: 11px; color: var(--muted); line-height: 1.35; }
-  .scratchCard{ border: 1px dashed var(--accent-dim); background: var(--accent-glow); }
-  .scratchCard:hover{ border-color: var(--accent); background: rgba(242, 166, 90, 0.25); }
+/* build */
+.buildTop{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg button{background:var(--bg);color:var(--muted);border:0;padding:8px 14px;font:12px var(--mono);cursor:pointer}
+.seg button.on{background:var(--accent-glow);color:var(--accent)}
+.buildGrid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
+@media(max-width:760px){.buildGrid{grid-template-columns:1fr}}
+#gridHost svg{width:100%;max-width:560px;display:block;margin:0 auto;touch-action:manipulation}
+#gridHost.placing svg{cursor:crosshair}
+.plate{fill:#191c23;stroke:var(--border-bright);stroke-width:.8}
+.cell{fill:none;stroke:#262b35;stroke-width:.4}
+.mag{fill:#2a2f3a;stroke:#4a5263;stroke-width:.5}
+.fp{fill:rgba(242,166,90,.10);stroke:var(--accent);stroke-width:.7}
+.fp.sel{stroke:#fff;stroke-width:1.3;fill:rgba(242,166,90,.2)}
+.fp.bad{stroke:var(--err);fill:rgba(242,85,90,.15)}
+.cut{fill:#0b0c0f;stroke:var(--accent-dim);stroke-width:.5}
+.lbl{fill:var(--text);font:4.5px var(--sans);pointer-events:none}
+.selBar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;min-height:40px;margin-top:10px;font-size:12.5px;color:var(--muted)}
+.btn{background:var(--panel-2);border:1px solid var(--border-bright);color:var(--text);padding:8px 13px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:#1a1206;border-color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.small{padding:5px 9px;font-size:11px}
+.depthNote{text-align:center;font:10.5px var(--mono);color:var(--muted);margin-top:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.chip{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:999px;padding:6px 11px;font-size:12px;cursor:pointer}
+.chip .n{font-family:var(--mono);color:var(--muted);margin-left:5px}
+.chip.done{border-color:rgba(74,222,128,.4)}.chip.done .n{color:var(--ok)}
+.chip.active{border-color:var(--accent);background:var(--accent-glow)}
+select.any{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:12.5px;margin-bottom:10px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.issues{list-style:none;padding:0!important;margin:0}
+.issues li{padding:6px 0 6px 20px;position:relative;font-size:12.5px;border-bottom:1px solid var(--border)}
+.issues li:last-child{border-bottom:0}
+.issues li::before{content:"";position:absolute;left:4px;top:12px;width:7px;height:7px;border-radius:50%}
+.issues li.err::before{background:var(--err)}.issues li.warn::before{background:var(--warn)}.issues li.ok::before{background:var(--ok)}
+.small{font-size:11.5px;color:var(--muted);line-height:1.45}
 
-  /* DEFINE THE MACHINE FORM */
-  .machineForm{ max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
-  .formBlock{ background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
-  .formBlock h3{ margin: 0 0 12px 0; font-size: 14px; color: var(--accent); font-family: var(--mono); letter-spacing: 0.05em; }
-  
-  .checkboxGrid{ display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
-  .checkTile{
-    display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border);
-    padding: 8px 10px; border-radius: 6px; font-size: 12.5px; cursor: pointer; user-select: none;
-  }
-  .checkTile input{ accent-color: var(--accent); }
-  .checkTile:hover{ border-color: var(--border-bright); }
-
-  .radioGroup{ display: flex; flex-wrap: wrap; gap: 8px; }
-  .radioTile{
-    background: var(--bg); border: 1px solid var(--border); padding: 8px 14px; border-radius: 6px;
-    font-size: 12px; cursor: pointer; font-family: var(--mono); color: var(--muted);
-  }
-  .radioTile.selected{ border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
-
-  .submitBtn{
-    background: var(--accent); color: #1a1206; border: 0; padding: 12px 20px; border-radius: 8px;
-    font-weight: 700; font-size: 13.5px; cursor: pointer; width: 100%; transition: opacity 0.15s ease;
-  }
-  .submitBtn:hover{ opacity: 0.9; }
-
-  /* CORTEX RECOMMENDS VIEW */
-  .recommendBox{ max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
-  .recHeader{ background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
-  .recHeader .eyebrow{ font: 10px var(--mono); color: var(--accent); letter-spacing: 0.15em; }
-  .recHeader h2{ font-size: 22px; margin: 4px 0 10px 0; }
-  .recHeader .whyText{ font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 14px; }
-  
-  .specPills{ display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-  .specPill{ background: var(--bg); border: 1px solid var(--border); font-size: 11px; font-family: var(--mono); padding: 4px 8px; border-radius: 4px; color: var(--ok); }
-
-  .partsGrid{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .partListCard{ background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-  .partListCard h4{ margin: 0 0 10px 0; font-size: 12px; font-family: var(--mono); color: var(--accent); }
-  .partListCard ul{ margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--text); line-height: 1.6; }
-
-  .gameplanCard{ background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
-  .gameplanCard h3{ margin: 0 0 14px 0; font-size: 14px; font-family: var(--mono); color: var(--accent); }
-  .stepRow{ display: flex; gap: 12px; margin-bottom: 12px; font-size: 13px; }
-  .stepNum{ font-family: var(--mono); font-weight: 700; color: var(--accent); width: 20px; }
-  .stepText b{ display: block; color: var(--text); margin-bottom: 2px; }
-  .stepText span{ font-size: 11.5px; color: var(--muted); }
-
-  .machineryBtn{
-    background: var(--panel-2); border: 1px solid var(--border-bright); color: var(--accent);
-    padding: 10px 16px; border-radius: 8px; font-family: var(--mono); font-size: 11.5px;
-    cursor: pointer; text-align: center; margin-top: 10px; transition: all 0.15s ease;
-  }
-  .machineryBtn:hover{ background: var(--accent-glow); border-color: var(--accent); }
-
-  /* MICROCONTROLLER LAB (THE MACHINERY) */
-  .labTable{ width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12px; }
-  .labTable th, .labTable td{ padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
-  .labTable th{ font-family: var(--mono); color: var(--accent); font-size: 10.5px; text-transform: uppercase; background: var(--panel-2); }
-  .labTable tr:hover td{ background: var(--panel-2); }
-
-  /* CHAT VIEW */
-  .chat{ height: 100%; display:flex; flex-direction:column; gap: 14px; overflow-y: auto; }
-  .msg{ max-width: 88%; line-height: 1.5; font-size: 14px; white-space: pre-wrap; word-wrap: break-word; }
-  .msg.user{ align-self:flex-end; background: var(--panel-2); border: 1px solid var(--border); padding: 10px 14px; border-radius: 12px 12px 2px 12px; }
-  .msg.assistant{ align-self:flex-start; border-left: 2px solid var(--accent); padding-left: 12px; }
-  .msg.system{ align-self:center; color: var(--muted); font-family: var(--mono); font-size: 11px; text-align:center; }
-
-  /* INPUT & ATTACH */
-  .inputRow{ display:flex; gap:8px; padding: 12px; border-top: 1px solid var(--border); background: var(--panel-2); align-items:flex-end; }
-  textarea#input{ flex:1; resize:none; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--sans); font-size: 13.5px; max-height: 120px; }
-  textarea#input:focus{ outline: none; border-color: var(--accent-dim); }
-  button.actionBtn{ border:none; border-radius: 8px; padding: 0 16px; height: 38px; font-size: 13px; font-weight:600; cursor:pointer; background: var(--accent); color: #1a1206; }
+/* footer + toast */
+footer{display:flex;justify-content:space-between;gap:10px;padding:12px 18px;border-top:1px solid var(--border);background:var(--panel-2)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#2a2f3a;color:var(--text);border:1px solid var(--border-bright);padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:all .2s;max-width:90vw;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
-
-<div class="device">
-  <div class="bar">
-    <span class="dot" id="statusDot"></span>
-    <div class="device-col">
-      <span class="brand">CASE ZERO</span>
-      <span class="device-tag">CORTEX ENGINE // V0.2</span>
-    </div>
-    <select id="modelSelect"><option>dolphin-llama3:8b</option></select>
-  </div>
-
-  <div class="czNav">
-    <button class="czTab active" data-view="hubView">💡 What Do You Want to Make?</button>
-    <button class="czTab" data-view="machineView">⚙️ Define Machine</button>
-    <button class="czTab" data-view="recommendView">🎯 Cortex Recommendation</button>
-    <button class="czTab" data-view="labView">🔬 Microcontroller Lab</button>
-    <button class="czTab" data-view="chatView">🧠 Cortex Assistant</button>
-  </div>
-
-  <div class="viewStack">
-    
-    <!-- VIEW 1: PRESET HUB -->
-    <section class="czView active" id="hubView">
-      <div class="hubHeader">
-        <h1>WHAT DO YOU WANT TO MAKE?</h1>
-        <p>Pick a preset to start with or begin from your own raw idea.</p>
+<div class="app">
+  <div class="bar"><span class="brand">CASE ZERO</span><span class="tag">BUILDER v0.3</span></div>
+  <nav class="steps" id="steps"></nav>
+  <main>
+    <section class="view" id="v-make"></section>
+    <section class="view" id="v-define"></section>
+    <section class="view" id="v-parts"></section>
+    <section class="view" id="v-build">
+      <div class="buildTop">
+        <div class="seg" id="shellSeg"></div>
+        <div class="seg" id="panelSeg"></div>
       </div>
-
-      <div class="categorySection">
-        <div class="categoryTitle">MUSIC</div>
-        <div class="presetGrid">
-          <div class="presetCard" onclick="selectPreset('midi-synth')">
-            <div class="presetIcon">🎹</div>
-            <div class="presetName">MIDI Synth</div>
-            <div class="presetDesc">Hardware synthesizer with knob controls & MIDI output.</div>
-          </div>
-          <div class="presetCard" onclick="selectPreset('guitar-pedal')">
-            <div class="presetIcon">🎸</div>
-            <div class="presetName">Guitar Pedal</div>
-            <div class="presetDesc">Real-time digital audio effect processor pedal.</div>
-          </div>
-          <div class="presetCard" onclick="selectPreset('pocket-player')">
-            <div class="presetIcon">🎧</div>
-            <div class="presetName">Pocket Music Player</div>
-            <div class="presetDesc">Dedicated offline audio player with SD storage.</div>
-          </div>
-          <div class="presetCard" onclick="selectPreset('drum-machine')">
-            <div class="presetIcon">🥁</div>
-            <div class="presetName">Drum Machine</div>
-            <div class="presetDesc">Grid-based step sequencer with tactile pad triggers.</div>
-          </div>
+      <div class="buildGrid">
+        <div>
+          <div id="gridHost"></div>
+          <div class="selBar" id="selBar"></div>
+          <div class="depthNote" id="depthNote"></div>
         </div>
-      </div>
-
-      <div class="categorySection">
-        <div class="categoryTitle">COMPUTING</div>
-        <div class="presetGrid">
-          <div class="presetCard" onclick="selectPreset('cyberdeck')">
-            <div class="presetIcon">📟</div>
-            <div class="presetName">Cyberdeck</div>
-            <div class="presetDesc">Portable field terminal with display & custom keyboard.</div>
+        <div class="stack">
+          <div class="card">
+            <h4>PARTS FOR THIS PANEL</h4>
+            <div class="chips" id="tray"></div>
+            <select class="any" id="anyPart"></select>
+            <div class="row">
+              <button class="btn small" id="autoBtn">Auto-arrange</button>
+              <button class="btn small" id="clearBtn">Clear this panel</button>
+            </div>
           </div>
-          <div class="presetCard" onclick="selectPreset('ai-assistant')">
-            <div class="presetIcon">🎙️</div>
-            <div class="presetName">Personal AI Assistant</div>
-            <div class="presetDesc">Voice-prompted local assistant with visual indicators.</div>
-          </div>
-          <div class="presetCard" onclick="selectPreset('linux-laptop')">
-            <div class="presetIcon">💻</div>
-            <div class="presetName">Linux Laptop</div>
-            <div class="presetDesc">Minimal SBC-based laptop built into a custom enclosure.</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="categorySection">
-        <div class="categoryTitle">GAMES</div>
-        <div class="presetGrid">
-          <div class="presetCard" onclick="selectPreset('game-controller')">
-            <div class="presetIcon">🎮</div>
-            <div class="presetName">Simple Game Controller</div>
-            <div class="presetDesc">Custom USB/Bluetooth gamepad with arcade buttons.</div>
-          </div>
-          <div class="presetCard" onclick="selectPreset('portable-arcade')">
-            <div class="presetIcon">👾</div>
-            <div class="presetName">Portable Arcade</div>
-            <div class="presetDesc">Handheld retro emulator machine with integrated screen.</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="categorySection">
-        <div class="categoryTitle">LIGHT + ENVIRONMENT</div>
-        <div class="presetGrid">
-          <div class="presetCard" onclick="selectPreset('led-light')">
-            <div class="presetIcon">💡</div>
-            <div class="presetName">LED Light</div>
-            <div class="presetDesc">Custom addressable RGB strip controller with modes.</div>
-          </div>
-          <div class="presetCard" onclick="selectPreset('plant-monitor')">
-            <div class="presetIcon">🌱</div>
-            <div class="presetName">Plant Monitor</div>
-            <div class="presetDesc">Soil moisture, ambient light, and water level tracker.</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="categorySection">
-        <div class="categoryTitle">OR START FROM SCRATCH</div>
-        <div class="presetGrid">
-          <div class="presetCard scratchCard" onclick="selectPreset('scratch')">
-            <div class="presetIcon">✨</div>
-            <div class="presetName">I Have An Idea</div>
-            <div class="presetDesc">Define a custom hardware machine from a blank slate.</div>
+          <div class="card">
+            <h4>CHECKS</h4>
+            <ul class="issues" id="issueList"></ul>
           </div>
         </div>
       </div>
     </section>
-
-    <!-- VIEW 2: DEFINE THE MACHINE -->
-    <section class="czView" id="machineView">
-      <div class="machineForm">
-        <div class="formBlock">
-          <h3 id="selectedPresetTitle">DEFINING YOUR MACHINE</h3>
-          <p style="font-size: 12.5px; color: var(--muted); margin-bottom: 12px;">What do you want it to do?</p>
-          <div class="checkboxGrid" id="functionCheckboxes">
-            <label class="checkTile"><input type="checkbox" value="Play sounds"> Play sounds</label>
-            <label class="checkTile"><input type="checkbox" value="Accept buttons"> Accept buttons</label>
-            <label class="checkTile"><input type="checkbox" value="Read knobs"> Read knobs</label>
-            <label class="checkTile"><input type="checkbox" value="Control MIDI"> Control MIDI</label>
-            <label class="checkTile"><input type="checkbox" value="Display information"> Display information</label>
-            <label class="checkTile"><input type="checkbox" value="Save settings"> Save settings</label>
-            <label class="checkTile"><input type="checkbox" value="Connect wirelessly"> Connect wirelessly</label>
-          </div>
-        </div>
-
-        <div class="formBlock">
-          <h3>HOW SHOULD IT CONNECT?</h3>
-          <div class="radioGroup" id="connectionGroup">
-            <div class="radioTile selected" onclick="selectRadio(this, 'Nothing')">○ Nothing</div>
-            <div class="radioTile" onclick="selectRadio(this, 'USB')">○ USB</div>
-            <div class="radioTile" onclick="selectRadio(this, 'Wi-Fi')">○ Wi-Fi</div>
-            <div class="radioTile" onclick="selectRadio(this, 'Bluetooth')">○ Bluetooth</div>
-            <div class="radioTile" onclick="selectRadio(this, 'USB + Bluetooth')">○ USB + Bluetooth</div>
-            <div class="radioTile" onclick="selectRadio(this, 'Wi-Fi + Bluetooth')">○ Wi-Fi + Bluetooth</div>
-          </div>
-        </div>
-
-        <div class="formBlock">
-          <h3>HOW MUCH DO YOU WANT TO SPEND?</h3>
-          <div class="radioGroup" id="budgetGroup">
-            <div class="radioTile selected" onclick="selectRadio(this, '$')">$ Basic</div>
-            <div class="radioTile" onclick="selectRadio(this, '$$')">$$ Affordable</div>
-            <div class="radioTile" onclick="selectRadio(this, '$$$')">$$$ More capable</div>
-            <div class="radioTile" onclick="selectRadio(this, '$$$$')">$$$$ Advanced</div>
-            <div class="radioTile" onclick="selectRadio(this, '$$$$$')">$$$$$ Go wild</div>
-          </div>
-        </div>
-
-        <button class="submitBtn" onclick="generateRecommendation()">CORTEX, RECOMMEND MY BUILD</button>
-      </div>
-    </section>
-
-    <!-- VIEW 3: CORTEX RECOMMENDS -->
-    <section class="czView" id="recommendView">
-      <div class="recommendBox">
-        <div class="recHeader">
-          <div class="eyebrow">CORTEX RECOMMENDS</div>
-          <h2 id="recBoardName">Raspberry Pi Pico 2</h2>
-          <div class="whyText" id="recWhyText">Good fit for buttons, knobs, MIDI, displays, and real-time hardware control.</div>
-          <div style="font-size: 11px; font-family: var(--mono); color: var(--muted); margin-bottom: 6px;">CAPABILITIES VERIFIED:</div>
-          <div class="specPills">
-            <span class="specPill">✓ GPIO</span>
-            <span class="specPill">✓ ADC</span>
-            <span class="specPill">✓ PWM</span>
-            <span class="specPill">✓ SPI</span>
-            <span class="specPill">✓ I2C</span>
-          </div>
-        </div>
-
-        <div class="partsGrid">
-          <div class="partListCard">
-            <h4>YOU WILL NEED</h4>
-            <ul id="recPartsList">
-              <li>Pico 2 Microcontroller</li>
-              <li>MIDI interface components</li>
-              <li>Potentiometers (10k)</li>
-              <li>Tactile buttons</li>
-              <li>Breadboard & Wires</li>
-            </ul>
-          </div>
-          <div class="partListCard">
-            <h4>YOU MAY ALSO WANT</h4>
-            <ul id="recOptionalList">
-              <li>OLED Display (128x64)</li>
-              <li>Case Zero Enclosure</li>
-              <li>Rechargeable LiPo Battery</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="gameplanCard">
-          <h3>BUILD THIS PROJECT</h3>
-          <div class="stepRow"><div class="stepNum">1</div><div class="stepText"><b>Get the parts</b><span>Gather your board, sensors, and breadboard cables.</span></div></div>
-          <div class="stepRow"><div class="stepNum">2</div><div class="stepText"><b>Wire it</b><span>Follow the Cortex Pin Mapper to build the breadboard prototype.</span></div></div>
-          <div class="stepRow"><div class="stepNum">3</div><div class="stepText"><b>Upload the starter code</b><span>Flash the initial C++/MicroPython starter template.</span></div></div>
-          <div class="stepRow"><div class="stepNum">4</div><div class="stepText"><b>Test each part</b><span>Run individual diagnostic checks on buttons, knobs, and sensors.</span></div></div>
-          <div class="stepRow"><div class="stepNum">5</div><div class="stepText"><b>Make your enclosure</b><span>Fit the working circuit into your Case Zero shell setup.</span></div></div>
-          <div class="stepRow"><div class="stepNum">6</div><div class="stepText"><b>Modify it</b><span>Expand capabilities with add-ons and custom code logic.</span></div></div>
-        </div>
-
-        <button class="machineryBtn" onclick="switchTab('labView')">WHY THIS BOARD? Reveal Microcontroller Machinery →</button>
-      </div>
-    </section>
-
-    <!-- VIEW 4: MICROCONTROLLER LAB -->
-    <section class="czView" id="labView">
-      <div style="margin-bottom: 16px;">
-        <div style="font-family: var(--mono); font-size: 10px; color: var(--accent); letter-spacing: 0.1em;">HARDWARE COMPARISON ENGINE</div>
-        <h2 style="margin: 4px 0;">Microcontroller Matrix</h2>
-        <p style="font-size: 12.5px; color: var(--muted);">Compare options when you want to look under the hood of Cortex's recommendations.</p>
-      </div>
-
-      <table class="labTable">
-        <thead>
-          <tr>
-            <th>Board</th>
-            <th>Best For</th>
-            <th>Cost</th>
-            <th>Wireless</th>
-            <th>Key Hardware Specs</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><b>Pico 2</b></td>
-            <td>Hardware projects & real-time control</td>
-            <td>$$</td>
-            <td>No</td>
-            <td>520 KB SRAM, 4 MB Flash, 2x SPI, 2x I2C, 2x UART, 24 PWM</td>
-          </tr>
-          <tr>
-            <td><b>Pico 2 W</b></td>
-            <td>Hardware + wireless connectivity</td>
-            <td>$$</td>
-            <td>Wi-Fi + Bluetooth</td>
-            <td>520 KB SRAM, 4 MB Flash + CYW43439 Wireless module</td>
-          </tr>
-          <tr>
-            <td><b>UNO R4 Minima</b></td>
-            <td>Beginner electronics & standard shields</td>
-            <td>$$</td>
-            <td>No</td>
-            <td>32-bit ARM M4, 14 Digital I/O, 6 Analog Inputs, DAC</td>
-          </tr>
-          <tr>
-            <td><b>UNO R4 WiFi</b></td>
-            <td>Arduino ecosystem + wireless IoT</td>
-            <td>$$$</td>
-            <td>Wi-Fi + Bluetooth</td>
-            <td>RA4M1 + ESP32-S3 module, 12x8 LED Matrix, Qwiic connector</td>
-          </tr>
-          <tr>
-            <td><b>ESP32-S3</b></td>
-            <td>Connected devices & AI/Display builds</td>
-            <td>$$$</td>
-            <td>Wi-Fi + Bluetooth</td>
-            <td>Dual-core Xtensa, USB OTG, Vector hardware acceleration</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <!-- VIEW 5: CHAT / CORTEX ASSISTANT -->
-    <section class="czView" id="chatView">
-      <div class="chat" id="chat">
-        <div class="msg system">Cortex engine online. State your build objectives or ask a technical question.</div>
-      </div>
-    </section>
-
-  </div>
-
-  <div class="inputRow">
-    <textarea id="input" rows="1" placeholder="Ask Cortex about your build, code, or wiring..."></textarea>
-    <button class="actionBtn" onclick="sendChat()">Send</button>
-  </div>
+    <section class="view" id="v-export"></section>
+  </main>
+  <footer>
+    <button class="btn" id="backBtn">← Back</button>
+    <button class="btn primary" id="nextBtn">Next →</button>
+  </footer>
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
-  // TAB NAVIGATION
-  const tabs = document.querySelectorAll('.czTab');
-  const views = document.querySelectorAll('.czView');
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let toastT;
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
+function download(name, text, type='text/plain'){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
 
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      const targetView = tab.getAttribute('data-view');
-      switchTab(targetView);
-    });
-  });
+/* ---------- data: functions, connections, budgets ---------- */
+const FUNCS = [
+  ['buttons','Buttons','buttons'],
+  ['knobs','Knobs & sliders','knobs and sliders'],
+  ['display','Small screen (menus, readouts)','small screens'],
+  ['video','Big screen / Linux / emulators','big screens and Linux'],
+  ['power','Heavy apps (desktop, browser, local AI)','heavy apps'],
+  ['sound','Play sounds','sound'],
+  ['dsp','Process audio live (effects)','live audio effects'],
+  ['midi','MIDI','MIDI'],
+  ['mic','Microphone','microphones'],
+  ['leds','LEDs','LEDs'],
+  ['sensors','Read sensors','sensors'],
+  ['storage','Save files or settings','storage'],
+  ['hid','Act as keyboard / gamepad','keyboard and gamepad mode'],
+  ['battery','Run on battery','battery power']
+].map(([id,label,short])=>({id,label,short}));
+const FL = Object.fromEntries(FUNCS.map(f=>[f.id,f]));
+const WEIGHT = {dsp:2, video:2, power:2};
+const CONNS = [['none','Nothing'],['usb','USB'],['wifi','Wi-Fi'],['bt','Bluetooth'],['usb+bt','USB + Bluetooth'],['wifi+bt','Wi-Fi + Bluetooth']];
+const BUDGETS = [[1,'$ Basic'],[2,'$$ Affordable'],[3,'$$$ More capable'],[4,'$$$$ Advanced'],[5,'$$$$$ Go wild']];
+const TIER = t => '$'.repeat(t);
 
-  function switchTab(viewId) {
-    tabs.forEach(t => t.classList.remove('active'));
-    views.forEach(v => v.classList.remove('active'));
-    
-    const targetTab = document.querySelector(`.czTab[data-view="${viewId}"]`);
-    const targetView = document.getElementById(viewId);
-    
-    if(targetTab) targetTab.classList.add('active');
-    if(targetView) targetView.classList.add('active');
-  }
+/* ---------- data: boards (rules engine) ---------- */
+/* fit: 0 = can't without add-ons, 1 = possible, 2 = good, 3 = great */
+const F = o => Object.assign({buttons:1,knobs:1,display:1,power:0,sound:1,dsp:0,midi:1,mic:0,leds:1,sensors:1,storage:1,hid:1,battery:1}, o);
+const BOARDS = [
+  {id:'pico2', name:'Raspberry Pi Pico 2', tier:1, usb:true, wifi:false, bt:false, linux:false,
+   specs:'RP2350 · 520 KB SRAM · 4 MB flash · 3 ADC · 24 PWM',
+   fit:F({buttons:3,knobs:3,midi:3,sound:2,dsp:1,display:2,storage:2,sensors:3,leds:3,battery:2,hid:3,mic:1})},
+  {id:'pico2w', name:'Raspberry Pi Pico 2 W', tier:1, usb:true, wifi:true, bt:true, linux:false,
+   specs:'RP2350 · 520 KB SRAM · Wi-Fi + Bluetooth (CYW43439)',
+   fit:F({buttons:3,knobs:3,midi:3,sound:2,dsp:1,display:2,storage:2,sensors:3,leds:3,battery:2,hid:3,mic:1})},
+  {id:'esp32s3', name:'ESP32-S3 DevKit', tier:2, usb:true, wifi:true, bt:true, linux:false,
+   specs:'Dual-core 240 MHz · native USB · Wi-Fi + Bluetooth LE',
+   fit:F({buttons:3,knobs:2,midi:2,sound:3,dsp:2,display:3,storage:3,sensors:3,leds:3,battery:3,hid:3,mic:3})},
+  {id:'unor4m', name:'Arduino UNO R4 Minima', tier:2, usb:true, wifi:false, bt:false, linux:false,
+   specs:'RA4M1 48 MHz · 32 KB RAM · DAC · shield-compatible',
+   fit:F({buttons:3,knobs:3,midi:2,sound:1,dsp:0,display:2,storage:1,sensors:3,leds:2,battery:1,hid:3,mic:0})},
+  {id:'unor4w', name:'Arduino UNO R4 WiFi', tier:3, usb:true, wifi:true, bt:true, linux:false,
+   specs:'RA4M1 + ESP32-S3 radio · 12×8 LED matrix · Qwiic',
+   fit:F({buttons:3,knobs:3,midi:2,sound:1,dsp:0,display:3,storage:1,sensors:3,leds:3,battery:1,hid:3,mic:0})},
+  {id:'daisy', name:'Electrosmith Daisy Seed', tier:3, usb:true, wifi:false, bt:false, linux:false,
+   specs:'STM32H750 480 MHz · 24-bit stereo audio codec · 64 MB SDRAM',
+   fit:F({buttons:2,knobs:3,midi:3,sound:3,dsp:3,display:1,storage:2,sensors:1,leds:1,battery:1,hid:1,mic:2})},
+  {id:'zero2w', name:'Raspberry Pi Zero 2 W', tier:2, usb:true, wifi:true, bt:true, linux:true,
+   specs:'Quad-core A53 1 GHz · 512 MB RAM · mini-HDMI · Wi-Fi + BT',
+   fit:F({buttons:2,knobs:0,midi:2,sound:2,dsp:1,display:2,storage:3,sensors:2,leds:1,battery:2,hid:2,mic:2,video:2,power:1})},
+  {id:'pi5', name:'Raspberry Pi 5', tier:4, usb:true, wifi:true, bt:true, linux:true,
+   specs:'Quad-core A76 2.4 GHz · dual 4K HDMI · PCIe · Wi-Fi + BT',
+   fit:F({buttons:2,knobs:0,midi:2,sound:2,dsp:2,display:3,storage:3,sensors:2,leds:1,battery:1,hid:1,mic:2,video:3,power:3})}
+];
 
-  // PRESET DATA ENGINE
-  const PRESETS = {
-    'midi-synth': {
-      name: 'MIDI Synth',
-      functions: ['Play sounds', 'Accept buttons', 'Read knobs', 'Control MIDI'],
-      connection: 'USB',
-      budget: '$$',
-      board: 'Raspberry Pi Pico 2',
-      why: 'Good fit for buttons, knobs, MIDI, displays, and real-time hardware audio control.',
-      parts: ['Pico 2 Microcontroller', 'MIDI DIN / USB interface', '10k Potentiometers (x4)', 'Tactile Push Buttons (x8)', 'Audio DAC / Passive Low-pass Filter', 'Breadboard & Jumper Wires'],
-      optional: ['OLED Display (128x64 I2C)', 'Case Zero Timber Enclosure', 'Rechargeable LiPo Battery Module']
-    },
-    'guitar-pedal': {
-      name: 'Guitar Pedal',
-      functions: ['Play sounds', 'Accept buttons', 'Read knobs', 'Save settings'],
-      connection: 'Nothing',
-      budget: '$$',
-      board: 'Raspberry Pi Pico 2',
-      why: 'High-clock speed for digital signal processing (DSP) and high analog pin sampling.',
-      parts: ['Pico 2 Microcontroller', 'Audio Input/Output Jacks (1/4")', 'Operational Amplifier (Op-Amp)', 'Expression Potentiometers', 'Heavy-duty Footswitch'],
-      optional: ['Status LED Ring', 'EEPROM for patch storage', 'Die-cast aluminum case']
-    },
-    'cyberdeck': {
-      name: 'Cyberdeck',
-      functions: ['Display information', 'Save settings', 'Accept buttons', 'Connect wirelessly'],
-      connection: 'USB + Bluetooth',
-      budget: '$$$',
-      board: 'ESP32-S3 Board',
-      why: 'Native USB OTG support, display driver capabilities, and wireless communication.',
-      parts: ['ESP32-S3 Microcontroller', '3.5 inch SPI TFT Screen', 'Mini Mechanical Keyboard Module', 'Custom Power Board', 'MicroSD Card Module'],
-      optional: ['LoRa Radio Transceiver', 'Battery Power Gauge', 'Modular Expansion Bus']
-    },
-    'scratch': {
-      name: 'Custom Machine Idea',
-      functions: ['Accept buttons', 'Display information'],
-      connection: 'USB',
-      budget: '$$',
-      board: 'Arduino UNO R4 Minima',
-      why: 'Versatile starter board with reliable 5V/3.3V tolerance for beginner prototyping.',
-      parts: ['Arduino UNO R4 Minima', 'Breadboard', 'Assorted Resistance Kit', 'Jumper Wire Bundle'],
-      optional: ['Proto-shield', 'Modular Sensor Pack']
+/* ---------- data: panel parts library (20mm grid units, cutouts in mm) ---------- */
+const CELL = 20;
+const C=(x,y,d)=>({t:'c',x,y,d}), R=(x,y,w,h)=>({t:'r',x,y,w,h}), P=(x,y,s,a)=>({t:'p',x,y,s,a});
+const ring = [...Array(6)].map((_,i)=>C(20+10*Math.cos(i*Math.PI/3), 20+10*Math.sin(i*Math.PI/3), 4));
+const LIB = {
+  display5:  {name:'5" display',        w:8,h:5,depth:10, cut:[R(80,50,121,76)]},
+  display35: {name:'3.5" display',      w:5,h:4,depth:8,  cut:[R(50,40,78,52)]},
+  display25: {name:'2.5" display',      w:4,h:3,depth:7,  cut:[R(40,30,56,44)]},
+  oled:      {name:'OLED 1.3"',         w:2,h:2,depth:6,  cut:[R(20,20,30,17)]},
+  keyboard:  {name:'Mini keyboard',     w:8,h:3,depth:14, cut:[R(80,30,150,52)]},
+  joystick:  {name:'Arcade joystick',   w:6,h:4,depth:45, cut:[C(60,40,24),C(36,24,4.2),C(84,24,4.2),C(36,56,4.2),C(84,56,4.2)]},
+  cluster6:  {name:'6-button cluster',  w:6,h:4,depth:35, cut:[C(20,20,24),C(60,20,24),C(100,20,24),C(20,60,24),C(60,60,24),C(100,60,24)]},
+  cluster2:  {name:'2-button cluster',  w:2,h:4,depth:35, cut:[C(20,20,24),C(20,60,24)]},
+  arcade30:  {name:'Arcade button 30mm',w:2,h:2,depth:35, cut:[C(20,20,28)]},
+  thumbstick:{name:'Thumbstick',        w:2,h:2,depth:18, cut:[C(20,20,22)]},
+  dpad:      {name:'D-pad',             w:2,h:2,depth:8,  cut:[P(20,20,30,10)]},
+  pad:       {name:'Drum pad',          w:2,h:2,depth:12, cut:[R(20,20,34,34)]},
+  speaker:   {name:'Speaker grille',    w:2,h:2,depth:18, cut:[C(20,20,4),...ring]},
+  footswitch:{name:'Footswitch',        w:2,h:2,depth:35, cut:[C(20,20,12.2)]},
+  slider:    {name:'Slider',            w:4,h:2,depth:15, cut:[R(40,20,62,3.5)]},
+  btn12:     {name:'Button 12mm',       w:1,h:1,depth:10, cut:[C(10,10,12)]},
+  knob:      {name:'Knob (pot)',        w:1,h:1,depth:20, cut:[C(10,10,7.5)]},
+  encoder:   {name:'Rotary encoder',    w:1,h:1,depth:20, cut:[C(10,10,7.2)]},
+  toggle:    {name:'Toggle switch',     w:1,h:1,depth:15, cut:[C(10,10,6.2)]},
+  led:       {name:'LED 5mm',           w:1,h:1,depth:8,  cut:[C(10,10,5.2)]},
+  jack:      {name:'1/4" jack',         w:1,h:1,depth:30, cut:[C(10,10,9.5)]},
+  usbc:      {name:'USB-C port',        w:1,h:1,depth:10, cut:[R(10,10,10,4)]}
+};
+
+/* ---------- data: shells (depths are placeholders for product dev to confirm) ---------- */
+const SHELLS = {
+  M:{name:'Medium', cols:10, rows:10, lidDepth:18, baseDepth:50},
+  S:{name:'Small',  cols:6,  rows:6,  lidDepth:14, baseDepth:40}
+};
+
+/* ---------- data: presets ---------- */
+const PRESETS = {
+  'midi-synth':     {cat:'Music', icon:'🎹', name:'MIDI Synth', desc:'Knobs, buttons and a slider that play sound and talk MIDI.',
+                     funcs:['sound','buttons','knobs','midi','display'], conn:'usb', budget:2,
+                     panel:[['lid','oled',1],['base','knob',4],['base','btn12',8],['base','slider',1],['base','usbc',1]]},
+  'guitar-pedal':   {cat:'Music', icon:'🎸', name:'Guitar Pedal', desc:'Real-time audio effects with footswitch and knobs.',
+                     funcs:['dsp','knobs','buttons','storage'], conn:'none', budget:3,
+                     panel:[['base','footswitch',1],['base','knob',3],['base','led',1],['base','jack',2],['base','toggle',1]]},
+  'pocket-player':  {cat:'Music', icon:'🎧', name:'Pocket Music Player', desc:'Offline player with SD storage and a speaker.',
+                     funcs:['sound','buttons','display','storage','battery'], conn:'none', budget:2,
+                     panel:[['lid','display25',1],['base','btn12',5],['base','knob',1],['base','speaker',1],['base','usbc',1]]},
+  'drum-machine':   {cat:'Music', icon:'🥁', name:'Drum Machine', desc:'Step sequencer with tactile pads.',
+                     funcs:['sound','buttons','knobs','midi','leds'], conn:'usb', budget:2,
+                     panel:[['lid','oled',1],['base','pad',8],['base','knob',2],['base','btn12',4]]},
+  'cyberdeck':      {cat:'Computing', icon:'📟', name:'Cyberdeck', desc:'Portable field terminal with screen and keyboard.',
+                     funcs:['video','hid','storage','battery'], conn:'wifi+bt', budget:3,
+                     panel:[['lid','display5',1],['base','keyboard',1],['base','thumbstick',1],['base','btn12',2],['base','usbc',1]]},
+  'ai-assistant':   {cat:'Computing', icon:'🎙️', name:'Personal AI Assistant', desc:'Voice assistant that runs its model on the device.',
+                     funcs:['mic','sound','display','leds','buttons','power'], conn:'wifi', budget:4,
+                     panel:[['lid','display25',1],['base','speaker',1],['base','btn12',2],['base','led',3]]},
+  'linux-laptop':   {cat:'Computing', icon:'💻', name:'Linux Laptop', desc:'Minimal laptop built around a single-board computer.',
+                     funcs:['video','power','hid','storage','battery'], conn:'wifi+bt', budget:4,
+                     panel:[['lid','display5',1],['base','keyboard',1],['base','thumbstick',1],['base','usbc',1]]},
+  'game-controller':{cat:'Games', icon:'🎮', name:'Game Controller', desc:'Custom USB / Bluetooth gamepad.',
+                     funcs:['buttons','hid','battery'], conn:'usb+bt', budget:2,
+                     panel:[['base','dpad',1],['base','thumbstick',2],['base','btn12',6]]},
+  'portable-arcade':{cat:'Games', icon:'👾', name:'Portable Arcade', desc:'Retro emulator with screen, stick and buttons.',
+                     funcs:['video','sound','buttons','hid','battery'], conn:'none', budget:3,
+                     panel:[['lid','display5',1],['lid','speaker',1],['base','joystick',1],['base','cluster6',1]]},
+  'led-light':      {cat:'Light + Environment', icon:'💡', name:'LED Light', desc:'Addressable RGB controller with modes.',
+                     funcs:['leds','buttons','knobs'], conn:'wifi', budget:1,
+                     panel:[['base','knob',2],['base','btn12',3],['base','toggle',1]]},
+  'plant-monitor':  {cat:'Light + Environment', icon:'🌱', name:'Plant Monitor', desc:'Soil moisture, light and water tracking.',
+                     funcs:['sensors','display','battery'], conn:'wifi', budget:1,
+                     panel:[['lid','oled',1],['base','btn12',2],['base','led',3]]},
+  'scratch':        {cat:'Or start from scratch', icon:'✨', name:'I Have an Idea', desc:'Start blank. Pick functions, we suggest the rest.',
+                     funcs:['buttons','display'], conn:'usb', budget:2, panel:null}
+};
+
+/* ---------- state ---------- */
+const STEPS = [['make','Make'],['define','Define'],['parts','Parts'],['build','Build'],['export','Export']];
+const state = {step:'make', preset:null, funcs:[], conn:'usb', budget:2, boardPick:null,
+  build:{shell:'M', panels:{lid:[], base:[]}}, panel:'base', sel:null, mode:null, touched:false};
+let uid = 0;
+
+/* ---------- rules engine ---------- */
+function scoreBoards(){
+  const f = state.funcs, needWifi = state.conn.includes('wifi'), needBt = state.conn.includes('bt');
+  return BOARDS.map(b=>{
+    let s=0; const pros=[], cons=[];
+    for(const id of f){
+      if(id==='video' && !b.linux) continue;
+      const v = b.fit[id] ?? 1, w = WEIGHT[id] || 1;
+      s += v*10*w;
+      if(v>=3) pros.push(FL[id].short);
+      if(v===0){ s-=40; cons.push(`needs add-ons for ${FL[id].short}`); }
     }
+    if(f.includes('video') && !b.linux){ s-=80; cons.push('can’t drive a big screen or run Linux'); }
+    if(needWifi && !b.wifi){ s-=80; cons.push('no Wi-Fi'); }
+    if(needBt && !b.bt){ s-=80; cons.push('no Bluetooth'); }
+    if(b.tier > state.budget){ s -= (b.tier-state.budget)*25; cons.push('above your budget'); }
+    s -= b.tier*3;
+    return {b, s, pros, cons};
+  }).sort((a,c)=>c.s-a.s);
+}
+function chosen(){ const r=scoreBoards(); return r.find(x=>x.b.id===state.boardPick) || r[0]; }
+
+function internalParts(b){
+  const f=state.funcs, L=[`${b.name} (the brain)`];
+  if(f.includes('sound') && !f.includes('dsp')) L.push(b.linux ? 'USB or I2S audio + small speaker' : 'I2S amp (MAX98357A) + 4Ω speaker');
+  if(f.includes('dsp')) L.push(b.id==='daisy' ? 'Audio in/out wiring (codec is built in)' : 'Audio codec board + in/out jacks');
+  if(f.includes('midi')) L.push(b.usb ? 'USB MIDI needs no extra parts (add TRS jack + 6N138 for hardware MIDI)' : 'TRS MIDI jack + 6N138 optocoupler');
+  if(f.includes('video')) L.push('HDMI/DSI display + cable');
+  else if(f.includes('display')) L.push('Display module to match your panel (SPI or I2C)');
+  if(f.includes('storage')) L.push(b.linux ? 'microSD card (OS + files)' : 'microSD card module');
+  if(f.includes('sensors')) L.push('Your sensors (e.g. capacitive soil moisture, temperature)');
+  if(f.includes('leds')) L.push('WS2812B LEDs + 330Ω resistor');
+  if(f.includes('mic')) L.push('I2S MEMS microphone (INMP441)');
+  if(f.includes('battery')) L.push(b.linux ? 'LiPo + 5V boost/charger board (2A+)' : 'LiPo cell + USB-C charger board');
+  if(f.includes('knobs') && b.fit.knobs===0) L.push('ADC chip (ADS1115) to read knobs');
+  L.push('Hookup wire, M3 screws + standoffs, 4× 20×3mm magnets per panel');
+  return L;
+}
+
+function panelNeeds(){
+  const p = PRESETS[state.preset];
+  if(p && p.panel) return p.panel.map(([panel,part,qty])=>({panel,part,qty}));
+  const f=state.funcs, n=[], add=(panel,part,qty)=>n.push({panel,part,qty});
+  if(f.includes('video')) add('lid','display5',1); else if(f.includes('display')) add('lid','oled',1);
+  if(f.includes('hid')) add('base','dpad',1);
+  if(f.includes('buttons')) add('base','btn12',4);
+  if(f.includes('knobs')) add('base','knob',2);
+  if(f.includes('sound')||f.includes('mic')) add('base','speaker',1);
+  if(f.includes('leds')) add('base','led',2);
+  if(f.includes('dsp')) add('base','jack',2);
+  if(f.includes('battery')) add('base','usbc',1);
+  return n;
+}
+function recommendShell(needs){
+  let big=false; const cells={lid:0,base:0};
+  for(const n of needs){ const d=LIB[n.part]; cells[n.panel]+=d.w*d.h*n.qty; if(Math.max(d.w,d.h)>6) big=true; }
+  return (big || cells.lid>24 || cells.base>24) ? 'M' : 'S';
+}
+
+/* ---------- placement ---------- */
+function isMagnet(x,y){ const s=SHELLS[state.build.shell]; return (x===0||x===s.cols-1)&&(y===0||y===s.rows-1); }
+function dims(part,rot){ const d=LIB[part]; return rot?{w:d.h,h:d.w}:{w:d.w,h:d.h}; }
+function fits(panel,part,x,y,rot,ignoreId){
+  const s=SHELLS[state.build.shell], {w,h}=dims(part,rot);
+  if(x<0||y<0||x+w>s.cols||y+h>s.rows) return 'runs off the edge of the panel';
+  for(let i=x;i<x+w;i++) for(let j=y;j<y+h;j++) if(isMagnet(i,j)) return 'corner squares are reserved for magnets';
+  for(const o of state.build.panels[panel]){
+    if(o.id===ignoreId) continue;
+    const od=dims(o.part,o.rot);
+    if(x<o.x+od.w && x+w>o.x && y<o.y+od.h && y+h>o.y) return `overlaps the ${LIB[o.part].name}`;
+  }
+  return null;
+}
+function placeFirst(panel,part){
+  const s=SHELLS[state.build.shell];
+  for(let y=0;y<s.rows;y++) for(let x=0;x<s.cols;x++) for(const rot of [0,1]){
+    if(!fits(panel,part,x,y,rot)){ state.build.panels[panel].push({id:++uid,part,x,y,rot}); return true; }
+  }
+  return false;
+}
+function autoArrange(){
+  for(const panel of ['lid','base']){
+    state.build.panels[panel]=[];
+    const items=[];
+    for(const n of panelNeeds()) if(n.panel===panel) for(let k=0;k<n.qty;k++) items.push(n.part);
+    items.sort((a,b)=>LIB[b].w*LIB[b].h - LIB[a].w*LIB[a].h);
+    items.forEach(part=>placeFirst(panel,part));
+  }
+  state.sel=null; state.mode=null;
+}
+function issues(){
+  const s=SHELLS[state.build.shell], out=[];
+  for(const panel of ['lid','base']){
+    const depth = panel==='lid'?s.lidDepth:s.baseDepth;
+    for(const inst of state.build.panels[panel]){
+      const d=LIB[inst.part], err=fits(panel,inst.part,inst.x,inst.y,inst.rot,inst.id);
+      if(err) out.push({level:'err',panel,id:inst.id,msg:`${d.name} (${panel}) ${err}`});
+      if(d.depth>depth) out.push({level:'err',panel,id:inst.id,msg:`${d.name} needs ${d.depth}mm of depth; the ${panel} has ${depth}mm${panel==='lid'?' — move it to the base':' — try the Medium shell'}`});
+    }
+  }
+  for(const n of panelNeeds()){
+    const placed=state.build.panels[n.panel].filter(i=>i.part===n.part).length;
+    if(placed<n.qty) out.push({level:'warn',panel:n.panel,msg:`${n.qty-placed}× ${LIB[n.part].name} not placed on the ${n.panel} yet`});
+  }
+  return out;
+}
+
+/* ---------- geometry ---------- */
+function cutsFor(part,rot){
+  const d=LIB[part], H=d.h*CELL;
+  return d.cut.map(c=>{
+    if(!rot) return c;
+    const nx=H-c.y, ny=c.x;
+    return c.t==='r' ? {...c,x:nx,y:ny,w:c.h,h:c.w} : {...c,x:nx,y:ny};
+  });
+}
+function shapePoly(c){
+  if(c.t==='r') return [[c.x-c.w/2,c.y-c.h/2],[c.x+c.w/2,c.y-c.h/2],[c.x+c.w/2,c.y+c.h/2],[c.x-c.w/2,c.y+c.h/2]];
+  if(c.t==='c'){ const n=40,r=c.d/2,p=[]; for(let i=0;i<n;i++){const a=i/n*Math.PI*2; p.push([c.x+r*Math.cos(a),c.y+r*Math.sin(a)]);} return p; }
+  const s=c.s/2, a=c.a/2, x=c.x, y=c.y;
+  return [[x-a,y-s],[x+a,y-s],[x+a,y-a],[x+s,y-a],[x+s,y+a],[x+a,y+a],[x+a,y+s],[x-a,y+s],[x-a,y+a],[x-s,y+a],[x-s,y-a],[x-a,y-a]];
+}
+const area = p => { let s=0; for(let i=0;i<p.length;i++){const [x1,y1]=p[i],[x2,y2]=p[(i+1)%p.length]; s+=x1*y2-x2*y1;} return s/2; };
+
+/* Watertight panel mesh: slab decomposition, no external libraries */
+function panelFacets(panel){
+  const s=SHELLS[state.build.shell], W=s.cols*CELL, H=s.rows*CELL, T=3, cl=0.3;
+  const R4=v=>Math.round(v*1e4)/1e4;
+  const flip = p => p.map(([x,y])=>[R4(x),R4(H-y)]);
+  let outer = flip([[cl,cl],[W-cl,cl],[W-cl,H-cl],[cl,H-cl]]);
+  if(area(outer)<0) outer.reverse();
+  const rings=[outer];
+  for(const inst of state.build.panels[panel])
+    for(const c of cutsFor(inst.part,inst.rot)){
+      let h=flip(shapePoly(c).map(([x,y])=>[x+inst.x*CELL, y+inst.y*CELL]));
+      h=h.filter((q,i)=>{const r=h[(i+1)%h.length]; return q[0]!==r[0]||q[1]!==r[1];});
+      if(area(h)>0) h.reverse();
+      rings.push(h);
+    }
+  const edges=[];
+  for(const r of rings) for(let i=0;i<r.length;i++){
+    const a=r[i], b=r[(i+1)%r.length];
+    edges.push({a,b,vert:a[0]===b[0],x0:Math.min(a[0],b[0]),x1:Math.max(a[0],b[0])});
+  }
+  const ev=(e,x)=>{ const [p,q]=e.a[0]<=e.b[0]?[e.a,e.b]:[e.b,e.a];
+    if(x===p[0]) return p[1]; if(x===q[0]) return q[1]; return p[1]+(q[1]-p[1])*(x-p[0])/(q[0]-p[0]); };
+  const xs=[...new Set(rings.flat().map(p=>p[0]))].sort((a,b)=>a-b);
+  const Vc=new Map();
+  const V=x=>{ if(Vc.has(x)) return Vc.get(x); const ys=new Set();
+    for(const e of edges){ if(e.vert){ if(e.a[0]===x){ys.add(e.a[1]);ys.add(e.b[1]);} } else if(e.x0<=x&&e.x1>=x) ys.add(ev(e,x)); }
+    const out=[...ys].sort((a,b)=>a-b); Vc.set(x,out); return out; };
+  const f=[];
+  const face=poly=>{
+    const P=poly.filter((q,i)=>{const r=poly[(i+1)%poly.length]; return q[0]!==r[0]||q[1]!==r[1];});
+    if(P.length<3) return;
+    const c=[P.reduce((a,q)=>a+q[0],0)/P.length, P.reduce((a,q)=>a+q[1],0)/P.length];
+    for(let i=0;i<P.length;i++){ const a=P[i], b=P[(i+1)%P.length];
+      f.push([[c[0],c[1],T],[a[0],a[1],T],[b[0],b[1],T]]);
+      f.push([[c[0],c[1],0],[b[0],b[1],0],[a[0],a[1],0]]); }
   };
-
-  let currentSelection = PRESETS['midi-synth'];
-
-  function selectPreset(key) {
-    currentSelection = PRESETS[key] || PRESETS['scratch'];
-    document.getElementById('selectedPresetTitle').textContent = `DEFINING: ${currentSelection.name.toUpperCase()}`;
-    
-    // Set checkboxes
-    const checkboxes = document.querySelectorAll('#functionCheckboxes input');
-    checkboxes.forEach(cb => {
-      cb.checked = currentSelection.functions.includes(cb.value);
-    });
-
-    switchTab('machineView');
+  for(let k=0;k<xs.length-1;k++){
+    const x0=xs[k], x1=xs[k+1], xm=(x0+x1)/2;
+    const span=edges.filter(e=>!e.vert&&e.x0<=x0&&e.x1>=x1).sort((a,b)=>ev(a,xm)-ev(b,xm));
+    for(let i=0;i+1<span.length;i+=2){
+      const lo=span[i], hi=span[i+1];
+      const bl=[x0,ev(lo,x0)], br=[x1,ev(lo,x1)], tr=[x1,ev(hi,x1)], tl=[x0,ev(hi,x0)];
+      const right=V(x1).filter(y=>y>br[1]&&y<tr[1]).map(y=>[x1,y]);
+      const left=V(x0).filter(y=>y>bl[1]&&y<tl[1]).reverse().map(y=>[x0,y]);
+      face([bl,br,...right,tr,tl,...left]);
+    }
   }
-
-  function selectRadio(element, value) {
-    const parent = element.parentElement;
-    parent.querySelectorAll('.radioTile').forEach(tile => tile.classList.remove('selected'));
-    element.classList.add('selected');
+  for(const e of edges){
+    let pts;
+    if(e.vert){ const lo=Math.min(e.a[1],e.b[1]), hi=Math.max(e.a[1],e.b[1]);
+      const mid=V(e.a[0]).filter(y=>y>lo&&y<hi).map(y=>[e.a[0],y]); if(e.a[1]>e.b[1]) mid.reverse(); pts=[e.a,...mid,e.b]; }
+    else { const mid=xs.filter(x=>x>e.x0&&x<e.x1).map(x=>[x,ev(e,x)]); if(e.a[0]>e.b[0]) mid.reverse(); pts=[e.a,...mid,e.b]; }
+    for(let i=0;i+1<pts.length;i++){ const a=pts[i], b=pts[i+1];
+      f.push([[a[0],a[1],0],[b[0],b[1],0],[b[0],b[1],T]]);
+      f.push([[a[0],a[1],0],[b[0],b[1],T],[a[0],a[1],T]]); }
   }
-
-  function generateRecommendation() {
-    document.getElementById('recBoardName').textContent = currentSelection.board;
-    document.getElementById('recWhyText').textContent = currentSelection.why;
-    
-    const partsList = document.getElementById('recPartsList');
-    partsList.innerHTML = currentSelection.parts.map(p => `<li>${p}</li>`).join('');
-
-    const optionalList = document.getElementById('recOptionalList');
-    optionalList.innerHTML = currentSelection.optional.map(o => `<li>${o}</li>`).join('');
-
-    switchTab('recommendView');
+  return f;
+}
+function toSTL(name,facets){
+  let o=`solid ${name}\n`;
+  for(const [a,b,c] of facets){
+    const u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]], v=[c[0]-a[0],c[1]-a[1],c[2]-a[2]];
+    let nx=u[1]*v[2]-u[2]*v[1], ny=u[2]*v[0]-u[0]*v[2], nz=u[0]*v[1]-u[1]*v[0];
+    const L=Math.hypot(nx,ny,nz)||1; nx/=L; ny/=L; nz/=L;
+    o+=` facet normal ${nx.toFixed(5)} ${ny.toFixed(5)} ${nz.toFixed(5)}\n  outer loop\n`;
+    for(const p of [a,b,c]) o+=`   vertex ${p[0].toFixed(4)} ${p[1].toFixed(4)} ${p[2].toFixed(4)}\n`;
+    o+='  endloop\n endfacet\n';
   }
+  return o+`endsolid ${name}\n`;
+}
 
-  // BASIC CHAT STUB
-  function sendChat() {
-    const input = document.getElementById('input');
-    const msg = input.value.trim();
-    if(!msg) return;
+/* ---------- share link ---------- */
+function encodeBuild(){
+  const data={v:3,preset:state.preset,funcs:state.funcs,conn:state.conn,budget:state.budget,board:state.boardPick,shell:state.build.shell,panels:state.build.panels};
+  return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+}
+function loadFromHash(){
+  const m=location.hash.match(/#b=(.+)/); if(!m) return false;
+  try{
+    const d=JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+    state.preset = PRESETS[d.preset] ? d.preset : 'scratch';
+    state.funcs = (d.funcs||[]).filter(f=>FL[f]);
+    state.conn = CONNS.some(c=>c[0]===d.conn) ? d.conn : 'usb';
+    state.budget = [1,2,3,4,5].includes(d.budget) ? d.budget : 2;
+    state.boardPick = BOARDS.some(b=>b.id===d.board) ? d.board : null;
+    state.build.shell = SHELLS[d.shell] ? d.shell : 'M';
+    for(const p of ['lid','base']) state.build.panels[p]=(d.panels?.[p]||[]).filter(i=>LIB[i.part]).map(i=>({id:++uid,part:i.part,x:i.x|0,y:i.y|0,rot:i.rot?1:0}));
+    state.touched=true;
+    return true;
+  }catch(e){ return false; }
+}
 
-    const chat = document.getElementById('chat');
-    const userDiv = document.createElement('div');
-    userDiv.className = 'msg user';
-    userDiv.textContent = msg;
-    chat.appendChild(userDiv);
+/* ---------- views ---------- */
+function renderSteps(){
+  $('#steps').innerHTML = STEPS.map(([id,l],i)=>`<button class="stepBtn ${state.step===id?'active':''}" data-s="${id}"><b>${i+1}</b>${l}</button>`).join('');
+  document.querySelectorAll('.stepBtn').forEach(b=>b.onclick=()=>go(b.dataset.s));
+}
 
-    input.value = '';
-    chat.scrollTop = chat.scrollHeight;
+function renderMake(){
+  const cats={};
+  for(const [k,p] of Object.entries(PRESETS)) (cats[p.cat]=cats[p.cat]||[]).push([k,p]);
+  $('#v-make').innerHTML = `<h1>WHAT DO YOU WANT TO MAKE?</h1><p class="sub">Pick a starting point. Everything is editable after.</p>` +
+    Object.entries(cats).map(([cat,list])=>`<div class="cat"><div class="eyebrow">${esc(cat)}</div><div class="presetGrid">${
+      list.map(([k,p])=>`<button class="preset ${k==='scratch'?'scratch':''} ${state.preset===k?'sel':''}" data-k="${k}"><div class="ic">${p.icon}</div><div class="nm">${esc(p.name)}</div><div class="ds">${esc(p.desc)}</div></button>`).join('')
+    }</div></div>`).join('');
+  document.querySelectorAll('.preset').forEach(b=>b.onclick=()=>selectPreset(b.dataset.k));
+}
+function selectPreset(k){
+  const p=PRESETS[k];
+  state.preset=k; state.funcs=[...p.funcs]; state.conn=p.conn; state.budget=p.budget;
+  state.boardPick=null; state.touched=false; state.panel='base';
+  go('define');
+}
 
-    setTimeout(() => {
-      const assistantDiv = document.createElement('div');
-      assistantDiv.className = 'msg assistant';
-      assistantDiv.textContent = `Cortex response to: "${msg}"\n\nTo build this, make sure your pin configuration matches your hardware bus choices (SPI/I2C).`;
-      chat.appendChild(assistantDiv);
-      chat.scrollTop = chat.scrollHeight;
-    }, 600);
+function renderDefine(){
+  const p=PRESETS[state.preset];
+  $('#v-define').innerHTML = `
+    <h1>${esc(p?p.name:'Your machine').toUpperCase()}</h1><p class="sub">Tell us what it should do. Recommendations update instantly.</p>
+    <div class="stack">
+      <div class="card"><h4>WHAT SHOULD IT DO?</h4><div class="tiles">${
+        FUNCS.map(f=>`<label class="tile ${state.funcs.includes(f.id)?'on':''}"><input type="checkbox" value="${f.id}" ${state.funcs.includes(f.id)?'checked':''}> ${esc(f.label)}</label>`).join('')
+      }</div></div>
+      <div class="card"><h4>HOW SHOULD IT CONNECT?</h4><div class="radios" id="connR">${
+        CONNS.map(([v,l])=>`<div class="radio ${state.conn===v?'on':''}" data-v="${v}">${l}</div>`).join('')
+      }</div></div>
+      <div class="card"><h4>HOW MUCH DO YOU WANT TO SPEND?</h4><div class="radios" id="budR">${
+        BUDGETS.map(([v,l])=>`<div class="radio ${state.budget===v?'on':''}" data-v="${v}">${l}</div>`).join('')
+      }</div></div>
+    </div>`;
+  document.querySelectorAll('#v-define input[type=checkbox]').forEach(cb=>cb.onchange=()=>{
+    state.funcs = [...document.querySelectorAll('#v-define input:checked')].map(i=>i.value);
+    cb.closest('.tile').classList.toggle('on',cb.checked);
+    state.boardPick=null; if(!PRESETS[state.preset]?.panel) state.touched=false;
+  });
+  document.querySelectorAll('#connR .radio').forEach(r=>r.onclick=()=>{ state.conn=r.dataset.v; state.boardPick=null; renderDefine(); });
+  document.querySelectorAll('#budR .radio').forEach(r=>r.onclick=()=>{ state.budget=+r.dataset.v; state.boardPick=null; renderDefine(); });
+}
+
+function renderParts(){
+  const ranked=scoreBoards(), top=ranked[0], pick=ranked.find(x=>x.b.id===state.boardPick)||top;
+  const max=top.s, min=ranked[ranked.length-1].s, pct=r=>max===min?100:Math.max(4,Math.round((r.s-min)/(max-min)*100));
+  const needs=panelNeeds(), shell=SHELLS[recommendShell(needs)];
+  const good=state.funcs.filter(id=>(pick.b.fit[id]??0)>=2 && !(id==='video'&&!pick.b.linux)).map(id=>FL[id].short);
+  const why = pick.pros.length ? `Strong at ${pick.pros.slice(0,4).join(', ')}.` : good.length ? `Good at ${good.slice(0,4).join(', ')}.` : 'Closest match for what you picked.';
+  $('#v-parts').innerHTML = `
+    <h1>YOUR PARTS</h1><p class="sub">Picked by matching your functions, connection and budget. Tap any board below to swap.</p>
+    <div class="stack">
+      <div class="card rec">
+        <div class="eyebrow">${pick===top?'Recommended brain':'Your pick'}</div>
+        <h2>${esc(pick.b.name)}</h2>
+        <div class="spec">${TIER(pick.b.tier)} · ${esc(pick.b.specs)}</div>
+        <div class="why">${esc(why)}</div>
+        ${pick.cons.map(c=>`<div class="warnLine">⚠ ${esc(c[0].toUpperCase()+c.slice(1))}</div>`).join('')}
+      </div>
+      <div class="two">
+        <div class="card"><h4>INSIDE THE CASE</h4><ul>${internalParts(pick.b).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
+        <div class="card"><h4>ON THE PANELS · ${shell.name.toUpperCase()} SHELL</h4><ul>${
+          needs.length ? needs.map(n=>`<li>${n.qty}× ${esc(LIB[n.part].name)} <span class="small">(${n.panel})</span></li>`).join('') : '<li>Nothing yet — add parts in Build</li>'
+        }</ul></div>
+      </div>
+      <div class="card"><h4>COMPARE BOARDS</h4><div class="tableWrap"><table class="cmp">
+        <thead><tr><th>Board</th><th>Cost</th><th>Wireless</th><th>Linux</th><th>Match</th></tr></thead>
+        <tbody>${ranked.map(r=>`<tr class="cmpRow ${r===pick?'pick':''}" data-id="${r.b.id}">
+          <td><b>${esc(r.b.name)}</b>${r===top?' <span class="small">· recommended</span>':''}</td>
+          <td>${TIER(r.b.tier)}</td><td>${r.b.wifi?(r.b.bt?'Wi-Fi + BT':'Wi-Fi'):'—'}</td><td>${r.b.linux?'Yes':'—'}</td>
+          <td><div class="meter"><i style="width:${pct(r)}%"></i></div></td></tr>`).join('')}</tbody>
+      </table></div></div>
+    </div>`;
+  document.querySelectorAll('.cmp tr.cmpRow').forEach(tr=>tr.onclick=()=>{ state.boardPick=tr.dataset.id; renderParts(); });
+}
+
+/* ---------- build view ---------- */
+function renderBuild(){
+  const s=SHELLS[state.build.shell];
+  $('#shellSeg').innerHTML = Object.entries(SHELLS).map(([k,v])=>`<button class="${state.build.shell===k?'on':''}" data-k="${k}">${v.name} ${v.cols*CELL}mm</button>`).join('');
+  $('#panelSeg').innerHTML = ['lid','base'].map(p=>`<button class="${state.panel===p?'on':''}" data-p="${p}">${p==='lid'?'Lid':'Base'} (${state.build.panels[p].length})</button>`).join('');
+  document.querySelectorAll('#shellSeg button').forEach(b=>b.onclick=()=>{
+    state.build.shell=b.dataset.k; if(!state.touched) autoArrange(); state.sel=null; renderBuild();
+  });
+  document.querySelectorAll('#panelSeg button').forEach(b=>b.onclick=()=>{ state.panel=b.dataset.p; state.sel=null; state.mode=null; renderBuild(); });
+  $('#depthNote').textContent = `${s.name}: lid depth ${s.lidDepth}mm · base depth ${s.baseDepth}mm · 1 square = 20mm · corners = magnets`;
+  renderGrid(); renderSelBar(); renderTray(); renderIssues();
+}
+
+function renderGrid(){
+  const s=SHELLS[state.build.shell], W=s.cols*CELL, H=s.rows*CELL, list=state.build.panels[state.panel];
+  const bad=new Set(issues().filter(i=>i.id && i.level==='err').map(i=>i.id));
+  let g=`<svg id="gridSvg" viewBox="-2 -2 ${W+4} ${H+4}" xmlns="http://www.w3.org/2000/svg"><rect class="plate" x="0" y="0" width="${W}" height="${H}" rx="3"/>`;
+  for(let y=0;y<s.rows;y++) for(let x=0;x<s.cols;x++){
+    g+=`<rect class="cell" x="${x*CELL}" y="${y*CELL}" width="${CELL}" height="${CELL}"/>`;
+    if(isMagnet(x,y)) g+=`<circle class="mag" cx="${x*CELL+10}" cy="${y*CELL+10}" r="6"/>`;
   }
+  for(const inst of list){
+    const {w,h}=dims(inst.part,inst.rot), d=LIB[inst.part];
+    const cls=`fp ${inst.id===state.sel?'sel':''} ${bad.has(inst.id)?'bad':''}`;
+    g+=`<g transform="translate(${inst.x*CELL},${inst.y*CELL})"><title>${esc(d.name)}</title>`;
+    g+=`<rect class="${cls}" x="0.8" y="0.8" width="${w*CELL-1.6}" height="${h*CELL-1.6}" rx="2"/>`;
+    for(const c of cutsFor(inst.part,inst.rot)) g+=`<polygon class="cut" points="${shapePoly(c).map(p=>p.map(v=>v.toFixed(2)).join(',')).join(' ')}"/>`;
+    if(w>=2 && h>=2) g+=`<text class="lbl" x="3" y="${h*CELL-3}">${esc(d.name)}</text>`;
+    g+='</g>';
+  }
+  g+='</svg>';
+  $('#gridHost').innerHTML=g;
+  $('#gridHost').classList.toggle('placing', !!state.mode);
+  const svg=$('#gridSvg');
+  svg.addEventListener('click',e=>{
+    const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY;
+    const p=pt.matrixTransform(svg.getScreenCTM().inverse());
+    onCell(Math.floor(p.x/CELL), Math.floor(p.y/CELL));
+  });
+}
+
+function needFor(part){ return panelNeeds().filter(n=>n.panel===state.panel && n.part===part).reduce((a,n)=>a+n.qty,0); }
+function onCell(gx,gy){
+  const s=SHELLS[state.build.shell]; if(gx<0||gy<0||gx>=s.cols||gy>=s.rows) return;
+  const list=state.build.panels[state.panel];
+  if(state.mode?.type==='place'){
+    const part=state.mode.part; let rot=0, err=fits(state.panel,part,gx,gy,0);
+    if(err && !fits(state.panel,part,gx,gy,1)){ rot=1; err=null; }
+    if(err){ toast(`Can’t place there: ${err}`); return; }
+    const inst={id:++uid,part,x:gx,y:gy,rot}; list.push(inst); state.sel=inst.id; state.touched=true;
+    const placed=list.filter(i=>i.part===part).length;
+    if(placed>=needFor(part)) state.mode=null;
+  } else if(state.mode?.type==='move'){
+    const inst=list.find(i=>i.id===state.mode.id);
+    const err=inst && fits(state.panel,inst.part,gx,gy,inst.rot,inst.id);
+    if(err){ toast(`Can’t move there: ${err}`); return; }
+    if(inst){ inst.x=gx; inst.y=gy; state.touched=true; }
+    state.mode=null;
+  } else {
+    const hit=list.find(i=>{const {w,h}=dims(i.part,i.rot); return gx>=i.x&&gx<i.x+w&&gy>=i.y&&gy<i.y+h;});
+    state.sel = hit ? hit.id : null;
+  }
+  renderBuild();
+}
+
+function renderSelBar(){
+  const bar=$('#selBar'), list=state.build.panels[state.panel];
+  if(state.mode){
+    const label = state.mode.type==='place' ? `Tap a square to place the ${LIB[state.mode.part].name} (top-left corner)` : 'Tap where the top-left corner should go';
+    bar.innerHTML=`<span>${esc(label)}</span><button class="btn small" id="cancelMode">Cancel</button>`;
+    $('#cancelMode').onclick=()=>{ state.mode=null; renderBuild(); };
+    return;
+  }
+  const inst=list.find(i=>i.id===state.sel);
+  if(!inst){ bar.innerHTML='<span>Tap a part below to place it, or tap a placed part to edit it.</span>'; return; }
+  bar.innerHTML=`<b style="color:var(--text)">${esc(LIB[inst.part].name)}</b>
+    <button class="btn small" id="mvBtn">Move</button><button class="btn small" id="rtBtn">Rotate</button><button class="btn small" id="rmBtn">Remove</button>`;
+  $('#mvBtn').onclick=()=>{ state.mode={type:'move',id:inst.id}; renderBuild(); };
+  $('#rtBtn').onclick=()=>{
+    const err=fits(state.panel,inst.part,inst.x,inst.y,inst.rot?0:1,inst.id);
+    if(err){ toast(`Can’t rotate: ${err}`); return; }
+    inst.rot=inst.rot?0:1; state.touched=true; renderBuild();
+  };
+  $('#rmBtn').onclick=()=>{ state.build.panels[state.panel]=list.filter(i=>i.id!==inst.id); state.sel=null; state.touched=true; renderBuild(); };
+}
+
+function renderTray(){
+  const s=SHELLS[state.build.shell], list=state.build.panels[state.panel];
+  const needs=panelNeeds().filter(n=>n.panel===state.panel);
+  const tooBig=part=>{const d=LIB[part]; return Math.min(d.w,d.h)>s.cols-2 && Math.max(d.w,d.h)>s.cols;};
+  $('#tray').innerHTML = needs.length ? needs.map(n=>{
+    const placed=list.filter(i=>i.part===n.part).length;
+    const active=state.mode?.type==='place'&&state.mode.part===n.part;
+    return `<button class="chip ${placed>=n.qty?'done':''} ${active?'active':''}" data-part="${n.part}">${esc(LIB[n.part].name)}<span class="n">${placed}/${n.qty}</span></button>`;
+  }).join('') : '<span class="small">No suggested parts for this panel. Add any part below.</span>';
+  document.querySelectorAll('#tray .chip').forEach(c=>c.onclick=()=>{ state.mode={type:'place',part:c.dataset.part}; state.sel=null; renderBuild(); });
+  const sel=$('#anyPart');
+  sel.innerHTML = `<option value="">+ Add any part…</option>` + Object.entries(LIB).map(([k,d])=>`<option value="${k}" ${tooBig(k)?'disabled':''}>${esc(d.name)} — ${d.w}×${d.h}${tooBig(k)?' (too big for this shell)':''}</option>`).join('');
+  sel.onchange=()=>{ if(sel.value){ state.mode={type:'place',part:sel.value}; state.sel=null; renderBuild(); } };
+}
+
+function renderIssues(){
+  const all=issues();
+  $('#issueList').innerHTML = all.length
+    ? all.map(i=>`<li class="${i.level}">${esc(i.msg)}</li>`).join('')
+    : '<li class="ok">Everything fits. Ready to export.</li>';
+}
+
+$('#autoBtn').onclick=()=>{ autoArrange(); state.touched=true; renderBuild(); toast('Arranged from your parts list'); };
+$('#clearBtn').onclick=()=>{ state.build.panels[state.panel]=[]; state.sel=null; state.mode=null; state.touched=true; renderBuild(); };
+
+/* ---------- export view ---------- */
+function shoppingList(){
+  const pick=chosen(), counts={};
+  for(const p of ['lid','base']) for(const i of state.build.panels[p]) counts[i.part]=(counts[i.part]||0)+1;
+  return [...internalParts(pick.b), ...Object.entries(counts).map(([k,n])=>`${n}× ${LIB[k].name}`)];
+}
+function renderExport(){
+  const all=issues(), errs=all.filter(i=>i.level==='err').length, warns=all.length-errs;
+  const s=SHELLS[state.build.shell], shop=shoppingList();
+  const status = errs ? `<li class="err">${errs} problem${errs>1?'s':''} to fix in Build before printing</li>` : '';
+  const w = warns ? `<li class="warn">${warns} suggested part${warns>1?'s':''} not placed yet</li>` : '';
+  $('#v-export').innerHTML = `
+    <h1>EXPORT YOUR BUILD</h1><p class="sub">${esc(PRESETS[state.preset]?.name||'Custom build')} · ${s.name} shell · ${esc(chosen().b.name)}</p>
+    <div class="stack">
+      <div class="card"><h4>STATUS</h4><ul class="issues">${status}${w}${!all.length?'<li class="ok">Everything fits. Ready to print.</li>':''}</ul></div>
+      <div class="two">
+        <div class="card"><h4>PRINT FILES (FREE)</h4>
+          <div class="row" style="margin-bottom:10px">
+            <button class="btn primary" id="stlLid">Lid panel .stl</button>
+            <button class="btn primary" id="stlBase">Base panel .stl</button>
+          </div>
+          <div class="row" style="margin-bottom:10px">
+            <button class="btn" id="jsonBtn">Build file .json</button>
+            <button class="btn" id="linkBtn">Copy share link</button>
+          </div>
+          <p class="small">Panels export as flat 3mm plates with every cutout in place, sized to drop into the ${s.name} shell. The shell body, hinge and magnet pockets come in the next version.</p>
+        </div>
+        <div class="card"><h4>DON'T HAVE A PRINTER?</h4>
+          <p class="small" style="margin-top:0">We'll print your shell and panels and ship them to you.</p>
+          <button class="btn" disabled>Buy this shell — coming soon</button>
+        </div>
+      </div>
+      <div class="card"><h4>SHOPPING LIST</h4><ul>${shop.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+        <div class="row" style="margin-top:10px"><button class="btn small" id="copyShop">Copy list</button></div></div>
+    </div>`;
+  const slug=(PRESETS[state.preset]?.name||'custom').toLowerCase().replace(/[^a-z0-9]+/g,'-');
+  const stl=panel=>{
+    download(`case-zero-${slug}-${state.build.shell==='M'?'medium':'small'}-${panel}.stl`, toSTL(`case_zero_${panel}`, panelFacets(panel)), 'model/stl');
+  };
+  $('#stlLid').onclick=()=>stl('lid');
+  $('#stlBase').onclick=()=>stl('base');
+  $('#jsonBtn').onclick=()=>download(`case-zero-${slug}.json`, JSON.stringify(JSON.parse(decodeURIComponent(escape(atob(encodeBuild())))),null,2), 'application/json');
+  $('#linkBtn').onclick=()=>copy(location.origin+location.pathname+'#b='+encodeBuild(),'Share link copied');
+  $('#copyShop').onclick=()=>copy(shop.join('\n'),'Shopping list copied');
+}
+function copy(text,msg){
+  if(navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(()=>toast(msg),()=>prompt('Copy this:',text));
+  else prompt('Copy this:',text);
+}
+
+/* ---------- navigation ---------- */
+function go(step){
+  if(step!=='make' && !state.preset) selectPresetSilent('scratch');
+  if(step==='build' && !state.touched){ state.build.shell=recommendShell(panelNeeds()); autoArrange(); }
+  state.step=step;
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active', v.id==='v-'+step));
+  ({make:renderMake, define:renderDefine, parts:renderParts, build:renderBuild, export:renderExport})[step]();
+  renderSteps();
+  const i=STEPS.findIndex(s=>s[0]===step);
+  $('#backBtn').style.visibility = i===0 ? 'hidden' : 'visible';
+  $('#nextBtn').style.visibility = i===STEPS.length-1 ? 'hidden' : 'visible';
+  $('#nextBtn').textContent = i<STEPS.length-1 ? `${STEPS[i+1][1]} →` : '';
+  document.querySelector('main').scrollTop=0;
+}
+function selectPresetSilent(k){ const p=PRESETS[k]; state.preset=k; state.funcs=[...p.funcs]; state.conn=p.conn; state.budget=p.budget; state.touched=false; }
+$('#backBtn').onclick=()=>{ const i=STEPS.findIndex(s=>s[0]===state.step); if(i>0) go(STEPS[i-1][0]); };
+$('#nextBtn').onclick=()=>{ const i=STEPS.findIndex(s=>s[0]===state.step); if(i<STEPS.length-1) go(STEPS[i+1][0]); };
+
+go(loadFromHash() ? 'build' : 'make');
 </script>
 </body>
 </html>
