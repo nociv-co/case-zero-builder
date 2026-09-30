@@ -16,14 +16,14 @@
     <div class="topInner">
       <a class="brand" href="https://nociv.co">NOCIV</a>
       <span class="product">Case Zero <span>Builder</span></span>
-      <span class="version">v0.4</span>
+      <span class="version">v0.6</span>
     </div>
     <nav class="steps" id="steps" aria-label="Build steps"></nav>
   </header>
 
   <main class="wrap">
     <section class="view" id="v-make"></section>
-    <section class="view" id="v-define"></section>
+    <section class="view" id="v-circuit"></section>
     <section class="view" id="v-parts"></section>
     <section class="view" id="v-proto"></section>
     <section class="view" id="v-body"></section>
@@ -37,6 +37,18 @@
       <button class="btn primary" id="nextBtn">Next</button>
     </div>
   </footer>
+  <div class="mode" id="mode" hidden>
+    <div class="mTop">
+      <button class="mExit" id="mExit">Done</button>
+      <div class="mTitle"></div>
+      <div class="mTopR"></div>
+    </div>
+    <div class="mBody">
+      <aside class="mRail" aria-label="Parts tray"></aside>
+      <div class="mStage"></div>
+      <aside class="mSheet" aria-live="polite"></aside>
+    </div>
+  </div>
   <div class="toast" id="toast" role="status"></div>
 
   <script src="case-zero-data.js"></script>
