@@ -16,7 +16,8 @@
     <div class="topInner">
       <a class="brand" href="https://nociv.co">NOCIV</a>
       <span class="product">Case Zero <span>Builder</span></span>
-      <span class="version">v0.6</span>
+      <span class="version">v0.8</span>
+      <div class="topTools"><button class="meterBtn" id="meterBtn" aria-label="Build progress"><span class="mBar"><i></i></span><span class="mPct">0%</span></button><button class="learnBtn" id="learnBtn">Learn</button><button class="lvlBtn" id="lvlBtn">Level</button></div>
     </div>
     <nav class="steps" id="steps" aria-label="Build steps"></nav>
   </header>
@@ -49,8 +50,16 @@
       <aside class="mSheet" aria-live="polite"></aside>
     </div>
   </div>
+  <div class="qpop" id="qpop" hidden><div class="qBack"></div><div class="qCard" role="dialog" aria-modal="true"></div></div>
+  <div class="learn" id="learn" hidden>
+    <div class="lTop"><button class="mExit" id="learnExit">Done</button><b>Learn</b><span class="small">How it all works, in plain words</span></div>
+    <div class="lBody" id="learnBody"></div>
+  </div>
   <div class="toast" id="toast" role="status"></div>
 
+  <div class="lvl" id="lvl" hidden><div class="lvlInner"><div class="eyebrow">Case Zero Builder</div><h1>What's your level?</h1><p class="lead">No wrong answer. It changes how much we explain. You can switch any time.</p><div class="lvlGrid" id="lvlGrid"></div></div></div>
+  <canvas class="confetti" id="confetti" hidden></canvas>
+  <script src="nociv-card.js"></script>
   <script src="case-zero-data.js"></script>
   <script src="case-zero.js"></script>
 </body>
