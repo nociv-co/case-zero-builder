@@ -284,7 +284,7 @@ const SIZES = {
   XS: { name: 'Extra small', cols: 5,  rows: 4,  lidDepth: 12, baseDepth: 30 },
   S:  { name: 'Small',       cols: 6,  rows: 6,  lidDepth: 14, baseDepth: 40 },
   M:  { name: 'Medium',      cols: 10, rows: 10, lidDepth: 18, baseDepth: 50 },
-  L:  { name: 'Large',       cols: 14, rows: 10, lidDepth: 20, baseDepth: 60 }
+  L:  { name: 'Large (deep)', cols: 10, rows: 10, lidDepth: 24, baseDepth: 66 }
 };
 const SHELL = { wall: 3, floor: 2, panel: 3, disc: 1, gap: 0.3, ledge: 2, slotW: 30, slotD: 8, magnetD: 20.3, magnetH: 3.2 };
 const STYLES = {
@@ -438,15 +438,15 @@ for (const [id, rows] of Object.entries(OVERSEAS)) if (COMP[id]) COMP[id].varian
 
 /* Which USB cable each brain needs, and where to go for code + simulation. */
 const BOARD_TOOLS = {
-  pico2:   { usb: 'usbMicro', lang: 'MicroPython', sim: 'https://wokwi.com/projects/new/micropython-pi-pico', simNote: 'Wokwi simulates the original Pico. Your code runs the same on a Pico 2.',
+  pico2:   { usb: 'usbMicro', lang: 'MicroPython', sim: 'https://wokwi.com/projects/new/micropython-pi-pico',
              setup: [['Put MicroPython on your Pico', 'https://www.raspberrypi.com/documentation/microcontrollers/micropython.html'], ['Get Thonny, a free beginner code editor', 'https://thonny.org']] },
-  pico2w:  { usb: 'usbMicro', lang: 'MicroPython', sim: 'https://wokwi.com/projects/new/micropython-pi-pico-w', simNote: 'Wokwi simulates the original Pico W. Your code runs the same on a Pico 2 W.',
+  pico2w:  { usb: 'usbMicro', lang: 'MicroPython', sim: 'https://wokwi.com/projects/new/micropython-pi-pico-w',
              setup: [['Put MicroPython on your Pico', 'https://www.raspberrypi.com/documentation/microcontrollers/micropython.html'], ['Get Thonny, a free beginner code editor', 'https://thonny.org']] },
   esp32s3: { usb: 'usbC', lang: 'MicroPython', sim: 'https://wokwi.com/projects/new/micropython-esp32-s3',
              setup: [['Download MicroPython for the ESP32-S3', 'https://micropython.org/download/ESP32_GENERIC_S3/'], ['Get Thonny, a free beginner code editor', 'https://thonny.org']] },
-  unor4m:  { usb: 'usbC', lang: 'Arduino', sim: 'https://wokwi.com/projects/new/arduino-uno', simNote: 'Wokwi simulates the classic UNO. Pins match the UNO R4.',
+  unor4m:  { usb: 'usbC', lang: 'Arduino', sim: 'https://wokwi.com/projects/new/arduino-uno', simNote: 'Wokwi simulates the classic UNO. The pins match the UNO R4.',
              setup: [['Get the free Arduino IDE', 'https://www.arduino.cc/en/software']] },
-  unor4w:  { usb: 'usbC', lang: 'Arduino', sim: 'https://wokwi.com/projects/new/arduino-uno', simNote: 'Wokwi simulates the classic UNO. Pins match the UNO R4.',
+  unor4w:  { usb: 'usbC', lang: 'Arduino', sim: 'https://wokwi.com/projects/new/arduino-uno', simNote: 'Wokwi simulates the classic UNO. The pins match the UNO R4.',
              setup: [['Get the free Arduino IDE', 'https://www.arduino.cc/en/software']] },
   daisy:   { usb: 'usbMicro', lang: 'Daisy (C++)', sim: null,
              setup: [['Flash ready-made programs from your browser', 'https://github.com/electro-smith/Programmer'], ['Official Daisy example projects', 'https://github.com/electro-smith/DaisyExamples']] },
@@ -459,4 +459,101 @@ const PROJECT_SEARCH = [
   ['Instructables', q => `https://www.instructables.com/search/?q=${encodeURIComponent(q)}`],
   ['Hackster', q => `https://www.hackster.io/search?q=${encodeURIComponent(q)}`],
   ['Adafruit Learn', q => `https://learn.adafruit.com/search?q=${encodeURIComponent(q)}`]
+];
+
+/* v0.7 — how each brain sits in the shell: which edge its ports are on and how wide the cable notch is (mm). */
+const BRAIN_MOUNT = {
+  pico2:   { edge: 'short', notch: 14 }, pico2w: { edge: 'short', notch: 14 },
+  esp32s3: { edge: 'short', notch: 28 }, daisy:  { edge: 'short', notch: 14 },
+  unor4m:  { edge: 'short', notch: 34 }, unor4w: { edge: 'short', notch: 34 },
+  zero2w:  { edge: 'long',  notch: 52 }, pi5:    { edge: 'long',  notch: 52 }
+};
+/* Wokwi simulator: board part per brain, and a stand-in part for each of ours. */
+const WOKWI_BOARD = {
+  pico2:   { type: 'wokwi-pi-pico', id: 'pico', gnd: 'GND.8', v: '3V3', pin: p => p, attrs: { env: 'micropython-20231227-v1.22.0' } },
+  pico2w:  { type: 'board-pi-pico-w', id: 'pico', gnd: 'GND.8', v: '3V3', pin: p => p, attrs: { env: 'micropython-20231227-v1.22.0' } },
+  esp32s3: { type: 'board-esp32-s3-devkitc-1', id: 'esp', gnd: 'GND.1', v: '3V3.1', pin: p => String(p).replace(/^IO/, ''), attrs: { flashSize: '8', env: 'micropython-20231227-v1.22.0' } },
+  unor4m:  { type: 'wokwi-arduino-uno', id: 'uno', gnd: 'GND.1', v: '5V', pin: p => String(p).replace(/^D/, '') },
+  unor4w:  { type: 'wokwi-arduino-uno', id: 'uno', gnd: 'GND.1', v: '5V', pin: p => String(p).replace(/^D/, '') }
+};
+
+/* --------------------------------------------------------------------------
+   v0.8 — PLAIN WORDS
+   GLOSS: one-line answers behind every "?" (art = optional drawing slot).
+   LEARN: the Learn page, in everyday words. Edit freely.
+   -------------------------------------------------------------------------- */
+const GLOSS = {
+  brain:      { t: 'Brain (microcontroller)', s: 'A tiny computer that runs one job forever. It reads your buttons and knobs and decides what the lights, screen and sound do.', learn: 'body' },
+  pin:        { t: 'Pin', s: 'A metal leg on the brain. Each one is a doorway for one nerve. They are labeled on the board, like GP6.', learn: 'senses' },
+  ground:     { t: 'Ground (GND)', s: 'The way home. Electricity only flows in a loop, so every part needs a wire back to a GND pin.', learn: 'loop' },
+  power:      { t: '3V3 and 5V', s: 'Power pins. They push electricity out to your parts, like water pressure in a hose. 3V3 is gentle, 5V is stronger.', learn: 'loop' },
+  resistor:   { t: 'Resistor', s: 'A tiny part that slows electricity down, like a kink in a hose. It stops LEDs from drinking too much and burning out.', learn: 'loop' },
+  digital:    { t: 'On/off signal (digital)', s: 'Like a light switch: on or off, nothing in between. Buttons send this.', learn: 'senses' },
+  analog:     { t: 'Dial signal (analog)', s: 'Like a dimmer: any amount from 0 to 100%. Knobs and sliders send this.', learn: 'senses' },
+  pullup:     { t: 'Pull-up', s: 'The brain keeps the pin "up" (not pressed) by default. Pressing the button connects it to ground, and the brain notices the drop.', learn: 'senses' },
+  i2c:        { t: 'Shared 2-wire line (I2C)', s: 'Like a group chat. Many parts share the same 2 wires and each has its own name, so the brain knows who is talking.', learn: 'share' },
+  spi:        { t: 'Fast direct line (SPI)', s: 'Like a phone call. Faster than the group chat, which screens need, but it uses a few more wires.', learn: 'share' },
+  i2s:        { t: 'Sound line (I2S)', s: 'A line made just for sound. It carries music and voice cleanly between the brain and the speaker amp or microphone.', learn: 'share' },
+  mux:        { t: 'Switchboard (mux)', s: 'Your brain only has a few dial pins. The switchboard lets one pin read up to 16 dials by checking them one at a time, very fast.', learn: 'share' },
+  ads:        { t: 'Dial reader (ADS1115)', s: 'Some brains can only read on/off. This small helper reads dials for them and passes the numbers along.', learn: 'share' },
+  amp:        { t: 'Amp', s: 'The brain’s sound is a whisper. The amp turns it up loud enough to fill a speaker.', learn: 'limbs' },
+  code:       { t: 'Code', s: 'The brain’s instructions: when this happens, do that. It checks every part about 50 times a second, forever.', learn: 'code' },
+  micropython:{ t: 'MicroPython', s: 'A simple, readable language for small brains. Your starter code is written in it.', learn: 'code' },
+  breadboard: { t: 'Breadboard', s: 'A board full of holes for testing. Push wires in, pull them out, nothing is permanent. It’s your sample before production.', learn: 'real' },
+  solder:     { t: 'Soldering', s: 'Melting a little metal to join wires for good. Think hot glue, but for electricity.', learn: 'real' },
+  perfboard:  { t: 'Perfboard', s: 'A board with holes you solder parts onto. It’s the permanent version of your breadboard.', learn: 'real' },
+  simulator:  { t: 'Simulator', s: 'A pretend version of your build that runs in the browser. Free to try, no parts needed.', learn: 'code' },
+  ma:         { t: 'mA and battery life', s: 'mA is how fast your build drinks power. A battery is the gas tank. Bigger tank or less drinking means longer life.', learn: 'power' },
+  stl:        { t: 'STL file', s: 'A 3D shape your printer understands. You open it in a slicer before printing.', learn: 'print' },
+  slicer:     { t: 'Slicer', s: 'Free software that cuts a 3D shape into thin layers and tells your printer how to draw each one.', learn: 'print' },
+  infill:     { t: 'Infill', s: 'How solid the inside of a print is. 20% is like a honeycomb: strong, light and quick to print.', learn: 'print' },
+  fitcard:    { t: 'Fit test card', s: 'A quick thin print with every hole in your build. Like trying clothes on before buying.', learn: 'print' },
+  magnets:    { t: 'Magnet panels', s: 'Magnets in the corners hold each panel in place, so you can pop a panel off to change it. No screws.', learn: 'print' }
+};
+const LEARN = [
+  { id: 'body', title: 'Every device is a body', body: [
+    'Every gadget you own has the same six parts as a body. Once you see it, electronics stop being a mystery.',
+    'The <b>brain</b> makes decisions. <b>Senses</b> (buttons, knobs, sensors) tell it what’s happening. <b>Limbs</b> (lights, screens, speakers) do what it decides. <b>Nerves</b> (wires) carry messages between them. The <b>heart</b> (battery or USB) keeps everything alive. The <b>skeleton</b> (the case) holds it together.',
+    'When you build in Case Zero, you’re choosing which senses and limbs your device gets. We pick the brain and connect the nerves for you.'] },
+  { id: 'loop', title: 'Electricity runs in a loop', demo: 'loop', body: [
+    'Electricity is like cars on a racetrack. It leaves the power pin, runs through a part, and has to come back home through ground. Break the loop anywhere and everything stops.',
+    'That’s why every part has at least two wires: one out and one back.',
+    'Some parts need a <b>resistor</b>: a little speed bump that slows the flow. An LED without one gulps too much and burns out.'] },
+  { id: 'senses', title: 'How buttons and knobs talk', demo: 'dimmer', body: [
+    'Senses talk in two ways. A <b>button</b> is like a light switch: on or off. A <b>knob</b> is like a dimmer: any amount in between.',
+    'Each one connects to a <b>pin</b> on the brain, a little doorway labeled with a name like GP6. The brain checks every doorway many times a second.',
+    'Buttons work like a doorbell: quiet until pressed. Pressing connects the pin to ground, and the brain notices.'] },
+  { id: 'limbs', title: 'How lights, screens and sound work', body: [
+    'The brain controls limbs by switching power on and off very fast. Fast blinking looks like dimming to your eye.',
+    'Screens are tiny grids of dots the brain fills in, like a Lite-Brite.',
+    'Sound from the brain is a whisper. A small <b>amp</b> turns it up loud enough for a speaker.'] },
+  { id: 'share', title: 'Sharing wires', body: [
+    'Brains have a limited number of pins, so some parts share wires.',
+    'A <b>group chat</b> (I2C): many parts share 2 wires, and each has its own name. A <b>phone call</b> (SPI): a faster direct line for screens. A <b>switchboard</b> (mux): when you have more knobs than dial pins, it reads them one at a time, so fast you never notice.',
+    'Case Zero sets all of this up for you and adds the helper parts when you need them.'] },
+  { id: 'code', title: 'Code is the brain’s routine', body: [
+    'Code is a list of instructions: when this happens, do that. The brain runs it in a loop, checking every part about 50 times a second, forever.',
+    'Your starter code already knows every part you wired. It says out loud when you press a button or turn a knob, so you know everything is connected.',
+    'Try the simulator first. It runs your build in the browser, free, before you buy anything. Then change one number in the code and watch what happens. That’s how every builder starts.'] },
+  { id: 'power', title: 'Power: the gas tank', body: [
+    'A battery is a gas tank. <b>mAh</b> is the size of the tank. <b>mA</b> is how fast your build burns through it.',
+    'Screens, speakers and Wi-Fi are the hungriest parts. Buttons barely sip.',
+    'Case Zero estimates how long your battery lasts, and adds the right charger so you can refill it over USB.'] },
+  { id: 'real', title: 'From test to real', body: [
+    'Think of it like making clothes. The <b>breadboard</b> is the sample: push wires in, test, change your mind. Nothing is permanent.',
+    'When it works, you make the production version: <b>solder</b> the parts onto a <b>perfboard</b>, or order a custom circuit board.',
+    'Test one part at a time. If something stays quiet, it’s almost always a loose wire or one plugged into the wrong pin.'] },
+  { id: 'print', title: 'Printing the body', body: [
+    'The case prints in pieces: a shell and a swap panel for the base, plus the same for the lid. Panels hold your parts and snap on with magnets.',
+    'Print the <b>fit test card</b> first. It takes minutes and shows whether your real buttons and knobs fit the holes, like trying clothes on before buying.',
+    'Open the files in a free <b>slicer</b>, which turns them into printer instructions. No printer? Most city libraries have one.'] }
+];
+
+/* v0.8 — player levels. Changes words, hints and how much control is shown. */
+const LEVELS = [
+  { id: 'noob',     name: 'Noob',         line: 'Never built anything with electronics.', gets: 'Plain words, tips along the way, and we make most choices for you.' },
+  { id: 'novice',   name: 'Novice',       line: 'Tried a kit or two. Still learning the words.', gets: 'Plain words, tips, and a few more choices.' },
+  { id: 'rounded',  name: 'Well-rounded', line: 'Wired a few projects before.', gets: 'Plain words with the real names next to them. Every option.' },
+  { id: 'advanced', name: 'Advanced',     line: 'Comfortable with pins, code and soldering.', gets: 'Real terms, compact wiring, every option.' },
+  { id: 'expert',   name: 'Expert',       line: 'Just give me the tools.', gets: 'No hints. You land straight on the workbench.' }
 ];
