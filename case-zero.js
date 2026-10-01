@@ -19,6 +19,17 @@ function copyText(text, msg) { if (navigator.clipboard?.writeText) navigator.cli
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
 const art = (key, label) => `<div class="art" data-art="${esc(key)}"><img src="case-zero-art-${esc(key)}.png" alt="" onerror="this.remove()"><span class="artLabel">${esc(label)}</span></div>`;
 const roleTag = r => `<span class="role role-${r}">${ROLES[r].name}</span>`;
+let levelId = store.get('cz-level');
+const lvl = () => levelId || 'novice';
+const pro = () => ['advanced', 'expert'].includes(lvl());
+const showsAll = () => !['noob'].includes(lvl());
+const showsDeep = () => !['noob', 'novice'].includes(lvl());
+const term = (key, text) => GLOSS[key] && lvl() !== 'expert' ? `<span class="term">${text}<button class="q" data-q="${key}" aria-label="What does this mean?">?</button></span>` : text;
+const SIG_PLAIN = { 'digital in': ['on/off', 'digital'], 'digital in ×4': ['on/off ×4', 'digital'], 'digital in ×3': ['on/off ×3', 'digital'], 'analog in': ['dial', 'analog'], 'analog ×2 + digital': ['2 dials + on/off', 'analog'],
+  'digital out': ['on/off', 'digital'], 'digital out (data)': ['light data', 'digital'], 'I2C bus (shared)': ['group chat', 'i2c'], 'SPI bus': ['direct line', 'spi'], 'I2S audio out': ['sound out', 'i2s'], 'I2S audio in': ['sound in', 'i2s'],
+  'I2S + I2C': ['sound', 'i2s'], 'from the amp': ['from the amp', 'amp'], 'shares one analog pin': ['switchboard', 'mux'] };
+const sigText = sig => { const m = SIG_PLAIN[sig]; if (pro()) return m ? term(m[1], esc(sig)) : esc(sig); if (!m) return esc(sig); return term(m[1], esc(m[0])) + (lvl() === 'rounded' ? ` <span class="real">${esc(sig)}</span>` : ''); };
+const howText = r => esc(pro() ? r.how : (r.plain || r.how));
 
 /* ---------- icons (simple line drawings, 24x24) ---------- */
 const ICONS = {
@@ -53,7 +64,7 @@ const BOARD = Object.fromEntries(BOARDS.map(b => [b.id, b]));
 const TRAYMAP = {};
 TRAY.forEach(g => g.items.forEach(([kind, ref, name, ic, desc]) => { TRAYMAP[kind + ':' + ref] = { kind, ref, name, icon: ic, desc, role: g.role }; }));
 const trayInfo = it => TRAYMAP[it.kind + ':' + it.ref];
-const STEPS = [['make', 'Idea'], ['circuit', 'Circuit'], ['body', 'Body'], ['sim', 'Power on'], ['parts', 'Cost & order'], ['proto', 'Code & test'], ['save', 'Save & print']];
+const STEPS = [['make', 'Idea'], ['circuit', 'Circuit'], ['body', 'Body'], ['proto', 'Test'], ['parts', 'Order & print']];
 
 /* ---------- state ---------- */
 function freshState() {
@@ -63,7 +74,7 @@ function freshState() {
     priceMode: 'bal', variantPick: {}, have: {}, overseas: false, ordered: {}, costTab: 'parts',
     proto: { sim: true, breadboard: true, pcb: false, final: 'perf' },
     body: { size: 'M', style: 'briefcase', hinge: 'back', latch: 1, handle: true, lock: false, stay: true, feet: true, battery: 'none' },
-    panels: { lid: [], base: [] }, touched: false,
+    panels: { lid: [], base: [] }, touched: false, seen: {}, celebrated: false,
     sim: { on: false, lit: {}, screen: '', log: [], vals: {} }
   };
 }
@@ -209,6 +220,7 @@ function recommendSize() {
       if (deep > (panel === 'lid' ? s.lidDepth : s.baseDepth) - SHELL.floor - SHELL.panel - SHELL.disc) ok = false;
     }
     if (!ok) continue;
+    { const keepSize = state.body.size; state.body.size = k; const il = insideLayout(); state.body.size = keepSize; if (!il.brain) continue; }
     const keep = [state.body.size, JSON.stringify(state.panels), items.map(i => i.tried)];
     state.body.size = k; autoArrange();
     const all = items.every(i => placementOf(i.bid));
@@ -301,7 +313,7 @@ const PINMAPS = {
   esp:   { name: n => 'IO' + n, digital: [15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48, 14, 1, 2, 3, 10], analog: [1, 2, 3, 10],
            i2c: { SDA: 8, SCL: 9 }, spi: { SCK: 12, MOSI: 11, MISO: 13 }, i2s: { BCLK: 4, LRC: 5, DOUT: 6, DIN: 7 } },
   uno:   { name: n => typeof n === 'string' ? n : 'D' + n, digital: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], analog: ['A0', 'A1', 'A2', 'A3', 'A4', 'A5'],
-           i2c: { SDA: 'SDA', SCL: 'SCL' }, spi: { SCK: 13, MOSI: 11, MISO: 12 }, i2s: null },
+           i2c: { SDA: 'A4', SCL: 'A5' }, spi: { SCK: 13, MOSI: 11, MISO: 12 }, i2s: null },
   generic: { name: n => typeof n === 'string' ? n : 'D' + n, digital: [...Array(31).keys()], analog: [...Array(12).keys()].map(i => 'A' + i),
            i2c: { SDA: 'D12', SCL: 'D11' }, spi: { SCK: 'D8', MOSI: 'D10', MISO: 'D9' }, i2s: { BCLK: 'SAI', LRC: 'SAI', DOUT: 'SAI', DIN: 'SAI' } }
 };
@@ -324,7 +336,7 @@ function pinPlan() {
   const bus = {};
   if (needs('i2c')) bus.i2c = map.i2c;
   if (needs('spi')) bus.spi = map.spi;
-  if (needs('i2s')) { if (map.i2s) bus.i2s = map.i2s; else issues.push({ level: 'warn', msg: `${COMP[b.id].name} has no I2S audio port. Pick the ESP32-S3 or a Pico for sound.` }); }
+  if (needs('i2s')) { if (map.i2s) bus.i2s = map.i2s; else issues.push({ level: 'warn', msg: `${COMP[b.id].name} has no sound port, so the speaker or microphone can't connect.`, fix: 'soundBrain' }); }
   for (const k in bus) for (const v of Object.values(bus[k])) used.add(String(v));
   const dPool = map.digital.filter(p => !used.has(String(p)) && !map.analog.map(String).includes(String(p)));
   let aPool = map.analog.filter(p => !used.has(String(p)));
@@ -349,34 +361,37 @@ function pinPlan() {
     const P = []; const d = () => { const v = takeD(); if (v === null) dFail = true; P.push(v ?? '—'); return v ?? 'no pin left'; };
     const a = () => { const v = takeA(); if (v === null) dFail = true; P.push(v ?? '—'); return v ?? 'no pin left'; };
     let signal = '', how = '';
+    let plain = '';
+    const G = 'a GND pin (ground, the way home)', PW = `the ${vcc} pin (power)`;
     switch (c.wire) {
-      case 'button': { const p = d(); signal = 'digital in'; how = `One leg → ${p}, other leg → GND. Turn on the pin's internal pull-up.`; break; }
-      case 'joystick': { const p = [d(), d(), d(), d()]; signal = 'digital in ×4'; how = `Up → ${p[0]}, Down → ${p[1]}, Left → ${p[2]}, Right → ${p[3]}. Common → GND.`; break; }
-      case 'thumb': { const ax = a(), ay = a(), sw = d(); signal = 'analog ×2 + digital'; how = `VRx → ${ax}, VRy → ${ay}, SW → ${sw}, +5V → ${vcc}, GND → GND.`; break; }
-      case 'pot': { const p = a(); signal = 'analog in'; how = `Outer legs → ${vcc} and GND. Middle leg → ${p}.`; break; }
-      case 'analog3': { const p = a(); signal = 'analog in'; how = `AOUT → ${p}, VCC → ${vcc}, GND → GND.`; break; }
-      case 'piezo': { const p = a(); signal = 'analog in'; how = `Red → ${p}, black → GND. Add a 1MΩ resistor across the two wires.`; break; }
-      case 'encoder': { const p = [d(), d(), d()]; signal = 'digital in ×3'; how = `A → ${p[0]}, B → ${p[1]}, switch → ${p[2]}. Middle pin and switch common → GND.`; break; }
-      case 'led': { const p = d(); signal = 'digital out'; how = `${p} → 330Ω resistor → long leg. Short leg → GND.`; break; }
-      case 'strip': { const p = d(); signal = 'digital out (data)'; how = `DIN → ${p} through a 330Ω resistor. 5V and GND to the power supply, not the brain.`; break; }
-      case 'i2c': P.push('I2C'); signal = 'I2C bus (shared)'; how = `${I}, VCC → ${vcc}, GND → GND.`; break;
-      case 'spi': { const cs = d(); const extra = c.pins?.d ? `, DC → ${d()}, RST → ${d()}` : ''; P.unshift('SPI'); signal = 'SPI bus'; how = `${S}, CS → ${cs}${extra}, VCC → 3V3, GND → GND.`; break; }
-      case 'i2samp': P.push('I2S'); signal = 'I2S audio out'; how = bus.i2s ? `${S2}, DIN → ${N(bus.i2s.DOUT)}, VIN → 5V, GND → GND. Speaker to + and −.` : 'Needs an I2S port.'; break;
-      case 'i2smic': P.push('I2S'); signal = 'I2S audio in'; how = bus.i2s ? `SCK → ${N(bus.i2s.BCLK)}, WS → ${N(bus.i2s.LRC)}, SD → ${N(bus.i2s.DIN)}, L/R → GND, VDD → 3V3.` : 'Needs an I2S port.'; break;
-      case 'i2s': P.push('I2S'); signal = 'I2S + I2C'; how = bus.i2s ? `${S2}, DAC → ${N(bus.i2s.DOUT)}, ADC → ${N(bus.i2s.DIN)}. ${I}.` : 'Needs an I2S port.'; break;
-      case 'speaker': P.push('amp'); signal = 'from the amp'; how = 'Two wires to the amp’s + and − speaker terminals.'; break;
-      case 'jack': P.push('audio'); signal = 'audio'; how = b.id === 'daisy' ? 'Tip → Daisy audio in/out, sleeve → AGND.' : 'Tip → codec in/out, sleeve → GND.'; break;
-      case 'usb': P.push('USB'); signal = 'USB'; how = 'Plugs into a USB port on the brain.'; break;
-      case 'hdmi': P.push('HDMI'); signal = 'HDMI + USB'; how = 'HDMI cable to the brain. USB for power and touch.'; break;
-      case 'usbpanel': P.push('power'); signal = 'power in'; how = 'Panel-mount USB-C extension to the brain or charger input.'; break;
+      case 'button': { const p = d(); signal = 'digital in'; how = `One leg → ${p}, other leg → GND. Turn on the pin's internal pull-up.`; plain = `Connect one leg to the pin marked ${p} on the brain. Connect the other leg to ${G}.`; break; }
+      case 'joystick': { const p = [d(), d(), d(), d()]; signal = 'digital in ×4'; how = `Up → ${p[0]}, Down → ${p[1]}, Left → ${p[2]}, Right → ${p[3]}. Common → GND.`; plain = `The stick has 4 wires, one per direction: up to ${p[0]}, down to ${p[1]}, left to ${p[2]}, right to ${p[3]}. Its shared wire goes to ${G}.`; break; }
+      case 'thumb': { const ax = a(), ay = a(), sw = d(); signal = 'analog ×2 + digital'; how = `VRx → ${ax}, VRy → ${ay}, SW → ${sw}, +5V → ${vcc}, GND → GND.`; plain = `Left-right wire (VRx) to ${ax}. Up-down wire (VRy) to ${ay}. Press wire (SW) to ${sw}. +5V to ${PW}, GND to ground.`; break; }
+      case 'pot': { const p = a(); signal = 'analog in'; how = `Outer legs → ${vcc} and GND. Middle leg → ${p}.`; plain = `A knob has 3 legs. Outer legs go to ${PW} and ground. The middle leg goes to the pin marked ${p}.`; break; }
+      case 'analog3': { const p = a(); signal = 'analog in'; how = `AOUT → ${p}, VCC → ${vcc}, GND → GND.`; plain = `Signal wire (AOUT) to ${p}. VCC to ${PW}. GND to ground.`; break; }
+      case 'piezo': { const p = a(); signal = 'analog in'; how = `Red → ${p}, black → GND. Add a 1MΩ resistor across the two wires.`; plain = `Red wire to ${p}, black wire to ground. Put a 1MΩ resistor (brown-black-green) across the two wires so hits read cleanly.`; break; }
+      case 'encoder': { const p = [d(), d(), d()]; signal = 'digital in ×3'; how = `A → ${p[0]}, B → ${p[1]}, switch → ${p[2]}. Middle pin and switch common → GND.`; plain = `Side pins A and B go to ${p[0]} and ${p[1]}. The press pin goes to ${p[2]}. The middle pin goes to ground.`; break; }
+      case 'led': { const p = d(); signal = 'digital out'; how = `${p} → 330Ω resistor → long leg. Short leg → GND.`; plain = `Pin ${p} → a 330Ω resistor → the LED's long leg. Short leg to ground. The resistor keeps the LED from burning out.`; break; }
+      case 'strip': { const p = d(); signal = 'digital out (data)'; how = `DIN → ${p} through a 330Ω resistor. 5V and GND to the power supply, not the brain.`; plain = `The strip's DIN wire goes to ${p} through a 330Ω resistor. Its power wires go straight to the power supply, because 60 lights need more power than the brain can give.`; break; }
+      case 'i2c': P.push('I2C'); signal = 'I2C bus (shared)'; how = `${I}, VCC → ${vcc}, GND → GND.`; plain = `This part shares 2 wires with other parts: SDA to ${N(bus.i2c.SDA)}, SCL to ${N(bus.i2c.SCL)}. VCC to ${PW}, GND to ground.`; break;
+      case 'spi': { const cs = d(); const dc = c.pins?.d ? d() : null, rst = c.pins?.d ? d() : null; const extra = dc ? `, DC → ${dc}, RST → ${rst}` : ''; P.unshift('SPI'); signal = 'SPI bus'; how = `${S}, CS → ${cs}${extra}, VCC → 3V3, GND → GND.`;
+        plain = `Fast data wires: SCK to ${N(bus.spi.SCK)}, MOSI to ${N(bus.spi.MOSI)}, MISO to ${N(bus.spi.MISO)}. Its own wire (CS) to ${cs}${dc ? `, DC to ${dc}, RST to ${rst}` : ''}. VCC to 3V3, GND to ground.`; break; }
+      case 'i2samp': P.push('I2S'); signal = 'I2S audio out'; how = bus.i2s ? `${S2}, DIN → ${N(bus.i2s.DOUT)}, VIN → 5V, GND → GND. Speaker to + and −.` : 'Needs an I2S port.'; plain = bus.i2s ? `Sound wires: BCLK to ${N(bus.i2s.BCLK)}, LRC to ${N(bus.i2s.LRC)}, DIN to ${N(bus.i2s.DOUT)}. VIN to 5V, GND to ground. The speaker screws into its + and − terminals.` : 'This brain has no sound port. Pick a different brain for sound.'; break;
+      case 'i2smic': P.push('I2S'); signal = 'I2S audio in'; how = bus.i2s ? `SCK → ${N(bus.i2s.BCLK)}, WS → ${N(bus.i2s.LRC)}, SD → ${N(bus.i2s.DIN)}, L/R → GND, VDD → 3V3.` : 'Needs an I2S port.'; plain = bus.i2s ? `Sound wires: SCK to ${N(bus.i2s.BCLK)}, WS to ${N(bus.i2s.LRC)}, SD to ${N(bus.i2s.DIN)}. L/R and GND to ground, VDD to 3V3.` : 'This brain has no sound port. Pick a different brain for a microphone.'; break;
+      case 'i2s': P.push('I2S'); signal = 'I2S + I2C'; how = bus.i2s ? `${S2}, DAC → ${N(bus.i2s.DOUT)}, ADC → ${N(bus.i2s.DIN)}. ${I}.` : 'Needs an I2S port.'; plain = bus.i2s ? `Sound in and out wires go to ${N(bus.i2s.BCLK)}, ${N(bus.i2s.LRC)}, ${N(bus.i2s.DOUT)} and ${N(bus.i2s.DIN)}. Its settings wires share SDA and SCL.` : 'This brain has no sound port.'; break;
+      case 'speaker': P.push('amp'); signal = 'from the amp'; how = 'Two wires to the amp’s + and − speaker terminals.'; plain = 'The speaker gets its 2 wires from the small amp, not the brain. The amp makes the sound loud enough to hear.'; break;
+      case 'jack': P.push('audio'); signal = 'audio'; how = b.id === 'daisy' ? 'Tip → Daisy audio in/out, sleeve → AGND.' : 'Tip → codec in/out, sleeve → GND.'; plain = b.id === 'daisy' ? 'The tip connects to the Daisy audio pin. The outer sleeve connects to its audio ground (AGND).' : 'The tip connects to the sound board. The outer sleeve connects to ground.'; break;
+      case 'usb': P.push('USB'); signal = 'USB'; how = 'Plugs into a USB port on the brain.'; plain = 'Just plug it into a USB port on the brain.'; break;
+      case 'hdmi': P.push('HDMI'); signal = 'HDMI + USB'; how = 'HDMI cable to the brain. USB for power and touch.'; plain = 'An HDMI cable carries the picture. A USB cable powers it and handles touch.'; break;
+      case 'usbpanel': P.push('power'); signal = 'power in'; how = 'Panel-mount USB-C extension to the brain or charger input.'; plain = 'A short USB-C extension cable runs from the outside of the case to the brain (or the battery charger), so you can plug in without opening it.'; break;
       default: continue;
     }
-    rows.push({ id: x.id, bid: x.bid, label, role: c.role, signal, how, pins: P });
-    if (x.bid) (byBid[x.bid] = byBid[x.bid] || []).push(...P, '|' + how);
+    rows.push({ id: x.id, bid: x.bid, label, role: c.role, signal, how, plain, pins: P });
+    if (x.bid) (byBid[x.bid] = byBid[x.bid] || []).push(...P, '|' + how, '~' + plain);
   }
-  if (muxPins) rows.unshift({ id: 'mux16', label: 'Analog mux', role: 'nerves', signal: 'shares one analog pin', how: `S0 → ${muxPins.S0}, S1 → ${muxPins.S1}, S2 → ${muxPins.S2}, S3 → ${muxPins.S3}, SIG → ${muxPins.SIG}, VCC → ${vcc}, GND → GND.`, pins: [] });
-  if (aSource === 'ads') rows.unshift({ id: 'ads1115', label: 'ADS1115', role: 'nerves', signal: 'I2C bus (shared)', how: `${N(map.i2c.SDA)}/${N(map.i2c.SCL)} for SDA/SCL. Give each board its own address with the ADDR pin.`, pins: [] });
-  if (dFail) issues.push({ level: 'err', msg: `The ${COMP[b.id].name} is out of pins. Remove some parts or pick a bigger brain.` });
+  if (muxPins) rows.unshift({ id: 'mux16', label: 'Analog mux', role: 'nerves', signal: 'shares one analog pin', how: `S0 → ${muxPins.S0}, S1 → ${muxPins.S1}, S2 → ${muxPins.S2}, S3 → ${muxPins.S3}, SIG → ${muxPins.SIG}, VCC → ${vcc}, GND → GND.`, plain: `Your brain has more dials than dial pins, so this switchboard takes turns reading them. Its 4 control wires go to ${muxPins.S0}, ${muxPins.S1}, ${muxPins.S2} and ${muxPins.S3}. Its signal wire (SIG) goes to ${muxPins.SIG}. VCC to ${vcc}, GND to ground. Each dial then plugs into one of its C pins.`, pins: [] });
+  if (aSource === 'ads') rows.unshift({ id: 'ads1115', label: 'ADS1115', role: 'nerves', signal: 'I2C bus (shared)', how: `${N(map.i2c.SDA)}/${N(map.i2c.SCL)} for SDA/SCL. Give each board its own address with the ADDR pin.`, plain: `This brain can't read dials by itself, so this small helper reads them and passes the numbers along on 2 shared wires: SDA to ${N(map.i2c.SDA)}, SCL to ${N(map.i2c.SCL)}.`, pins: [] });
+  if (dFail) issues.push({ level: 'err', msg: `The ${COMP[b.id].name} ran out of doorways (pins) for all your parts.`, fix: 'biggerBrain' });
   const dUsed = map.digital.length - dPool.length;
   return { rows, issues, autos, byBid, bus: Object.keys(bus), dUsed, dMax: b.gpio, aNeed, aMax: b.adc, aSource, vcc };
 }
@@ -554,6 +569,7 @@ function trayShape(panel) {
     r.push({ ring: rect(x0, y0, x0 + P, y0 + P), top: ledgeTop });
     r.push({ ring: shapePoly(Cc(mx, my, SHELL.magnetD)), top: ledgeTop - SHELL.magnetH });
   }
+  if (panel === 'base') for (const reg of insideLayout().regions) r.push(reg);
   if (state.body.style === 'briefcase') {
     const sw = SHELL.slotW / 2, top = D - SHELL.slotD, hinge = state.body.hinge;
     if (hinge === 'back') r.push({ ring: panel === 'base' ? rect(W / 2 - sw, H - L, W / 2 + sw, H + t) : rect(W / 2 - sw, -t, W / 2 + sw, L), top });
@@ -561,9 +577,49 @@ function trayShape(panel) {
   }
   return r;
 }
+/* Inside the base: a cradle that holds the brain, a notch so its USB port stays reachable,
+   and a pocket for the battery. The cable notch goes on the side away from the hinge. */
+function insideLayout() {
+  const s = size(), W = s.cols * CELL, H = s.rows * CELL, t = SHELL.wall, L = SHELL.ledge, F = SHELL.floor;
+  const b = board(), mount = BRAIN_MOUNT[b.id] || { edge: 'short', notch: 14 }, rail = 2, fit = 0.6, railH = 4;
+  const side = state.body.style === 'briefcase' && state.body.hinge === 'left' ? 'right' : 'left';
+  const out = { regions: [], issues: [], side, brain: null, battery: null };
+  const [bw, bd] = mount.edge === 'short' ? [b.size[0], b.size[1]] : [b.size[1], b.size[0]];
+  const pw = bw + fit + 2 * rail, pd = bd + fit + 2 * rail;
+  const free = { x0: L + 1, x1: W - L - 1, y0: CELL + 3, y1: H - CELL - 3 };
+  if (pw > free.x1 - free.x0 || pd > free.y1 - free.y0) { out.issues.push({ level: 'err', msg: `The ${COMP[b.id].name} doesn't fit inside the ${s.name} base.`, fix: 'sizeUp' }); return out; }
+  const cy = H / 2, x0 = side === 'left' ? free.x0 : free.x1 - pw, y0 = cy - pd / 2;
+  out.brain = { x0, y0, x1: x0 + pw, y1: y0 + pd };
+  out.regions.push({ ring: rect(x0, y0, x0 + pw, y0 + pd), top: F + railH }, { ring: rect(x0 + rail, y0 + rail, x0 + pw - rail, y0 + pd - rail), top: F });
+  const nw = Math.min(mount.notch, pd - 2) / 2, nTop = F + 1;
+  out.regions.push({ ring: side === 'left' ? rect(-t, cy - nw, x0 + rail, cy + nw) : rect(x0 + pw - rail, cy - nw, W + t, cy + nw), top: nTop });
+  const batId = BATTERIES[state.body.battery].comps[0];
+  if (batId) {
+    const z = COMP[batId].size; let done = false;
+    for (const [lw, ld] of [[z[0], z[1]], [z[1], z[0]]]) {
+      const aw = lw + fit + 2 * rail, ad = ld + fit + 2 * rail;
+      const bx0 = side === 'left' ? free.x1 - aw : free.x0, by0 = cy - ad / 2;
+      const clash = side === 'left' ? bx0 < out.brain.x1 + 2 : bx0 + aw > out.brain.x0 - 2;
+      if (clash || ad > free.y1 - free.y0) continue;
+      out.battery = { x0: bx0, y0: by0, x1: bx0 + aw, y1: by0 + ad }; out.regions.push({ ring: rect(bx0, by0, bx0 + aw, by0 + ad), top: F + railH }, { ring: rect(bx0 + rail, by0 + rail, bx0 + aw - rail, by0 + ad - rail), top: F }); done = true; break;
+    }
+    if (!done) out.issues.push({ level: 'warn', msg: `No room for a battery pocket beside the brain in the ${s.name} base. You can tape the battery down instead.`, fix: 'sizeUp' });
+  }
+  return out;
+}
+/* Fit test card: one of every cutout in this build on a small plate. Print it first to check your real parts. */
+function fitCardShape() {
+  const fps = [...new Set(benchFP().map(i => i.ref))].sort((a, b) => FP[b].w * FP[b].h - FP[a].w * FP[a].h), maxW = 10 * CELL;
+  const place = []; let x = 0, y = 0, rowH = 0;
+  for (const fp of fps) { const w = FP[fp].w * CELL, h = FP[fp].h * CELL; if (x + w > maxW) { x = 0; y += rowH; rowH = 0; } place.push({ fp, x, y }); x += w; rowH = Math.max(rowH, h); }
+  const W = Math.max(CELL * 2, ...place.map(p => p.x + FP[p.fp].w * CELL)), H = y + rowH || CELL * 2;
+  const regions = [{ ring: rect(0, 0, W, H), top: 2 }];
+  for (const p of place) for (const c of cutsFor(p.fp, 0)) regions.push({ ring: shapePoly(c).map(([cx, cy]) => [cx + p.x, H - (cy + p.y)]), top: 0 });
+  return { regions, place, W, H };
+}
 let filCache = { key: '', val: null };
 function filamentEstimate() {
-  const key = JSON.stringify([state.body, state.panels]);
+  const key = JSON.stringify([state.body, state.panels, board().id]);
   if (filCache.key === key) return filCache.val;
   let vol = 0;
   for (const p of activePanels()) { vol += meshVolume(heightMesh(trayShape(p))); vol += meshVolume(heightMesh(panelShape(p))); }
@@ -595,6 +651,28 @@ function toDXF(panel) {
 }
 
 /* ==========================================================================
+   ONE-TAP FIXES — every warning that can be fixed gets a button
+   ========================================================================== */
+const SIZE_ORDER = ['XS', 'S', 'M', 'L'];
+const FIXES = {
+  biggerBrain: { label: 'Switch to a bigger brain', run() { const cur = board(), n = scoreBoards().find(r => r.b.gpio > cur.gpio); if (!n) return 'No bigger brain fits these parts.'; state.boardPick = n.b.id; return `Switched to the ${COMP[n.b.id].name}`; } },
+  soundBrain:  { label: 'Switch to a brain with sound', run() { const n = scoreBoards().find(r => PINMAPS[r.b.pinFamily].i2s && r.b.id !== board().id); if (!n) return 'No brain with sound fits.'; state.boardPick = n.b.id; return `Switched to the ${COMP[n.b.id].name}`; } },
+  linuxBrain:  { label: 'Switch to a Linux brain', run() { const n = scoreBoards().find(r => r.b.linux); state.boardPick = n.b.id; return `Switched to the ${COMP[n.b.id].name}`; } },
+  sizeUp:      { label: 'Make the case bigger', run() { const i = SIZE_ORDER.indexOf(state.body.size); if (i >= SIZE_ORDER.length - 1) return 'This is already the biggest size.'; state.body.size = SIZE_ORDER[i + 1]; if (!state.touched) autoArrange(); else syncPlacements(); return `Case is now ${SIZES[state.body.size].name}`; } },
+  toBase:      { label: 'Move it to the base', run(arg) { const it = benchItem(+arg); if (!it) return; for (const p of ['lid', 'base']) state.panels[p] = state.panels[p].filter(pl => pl.bid !== it.bid); it.panel = 'base'; it.tried = false; syncPlacements(); state.touched = true; return placementOf(it.bid) ? 'Moved to the base' : 'Moved. No room on the base yet, so it is waiting in the tray.'; } },
+  arrange:     { label: 'Place them for me', run() { autoArrange(); state.touched = true; return 'Arranged'; } }
+};
+const issueLi = i => `<li class="${i.level}">${esc(i.msg)}${i.fix && FIXES[i.fix] ? `<button class="fixBtn" data-fix="${i.fix}" data-arg="${i.arg ?? ''}">${FIXES[i.fix].label}</button>` : ''}</li>`;
+const issueAlert = i => `<div class="alert ${i.level}">${esc(i.msg)}${i.fix && FIXES[i.fix] ? ` <button class="fixBtn" data-fix="${i.fix}" data-arg="${i.arg ?? ''}">${FIXES[i.fix].label}</button>` : ''}</div>`;
+document.addEventListener('click', e => {
+  const f = e.target.closest('[data-fix]'); if (!f) return;
+  e.preventDefault(); e.stopPropagation();
+  const msg = FIXES[f.dataset.fix]?.run(f.dataset.arg); if (msg) toast(msg);
+  if (ui.mode) renderMode(); else RENDER[state.step]?.();
+  updateMeter();
+});
+
+/* ==========================================================================
    CHECKS
    ========================================================================== */
 function bodyIssues(plan) {
@@ -603,11 +681,11 @@ function bodyIssues(plan) {
   for (const panel of activePanels()) for (const pl of state.panels[panel]) {
     const d = FP[pl.fp], err = fits(panel, pl.fp, pl.x, pl.y, pl.rot, pl.bid);
     if (err) out.push({ level: 'err', bid: pl.bid, msg: `${d.name} (${panel}) ${err}.` });
-    if (d.depth > inner[panel]) out.push({ level: 'err', bid: pl.bid, msg: `${d.name} needs ${d.depth}mm below the panel; the ${panel} has ${inner[panel]}mm.${panel === 'lid' ? ' Move it to the base.' : ' Pick a bigger size.'}` });
-    for (const [id] of d.bom) if (COMP[id].linuxOnly && !b.linux) out.push({ level: 'err', bid: pl.bid, msg: `${d.name} needs a Linux brain (Zero 2 W or Pi 5).` });
+    if (d.depth > inner[panel]) out.push({ level: 'err', bid: pl.bid, msg: `The ${d.name.toLowerCase()} is ${d.depth}mm deep, but the ${panel} only has ${inner[panel]}mm of room.`, fix: panel === 'lid' ? 'toBase' : 'sizeUp', arg: pl.bid });
+    for (const [id] of d.bom) if (COMP[id].linuxOnly && !b.linux) out.push({ level: 'err', bid: pl.bid, msg: `The ${d.name.toLowerCase()} needs a brain that runs a full computer system (Linux).`, fix: 'linuxBrain' });
   }
   const unplaced = benchFP().filter(i => !placementOf(i.bid));
-  if (unplaced.length) out.push({ level: 'warn', msg: `${plural(unplaced.length, 'part')} not on a panel yet: ${[...new Set(unplaced.map(i => FP[i.ref].name))].join(', ')}.` });
+  if (unplaced.length) out.push({ level: 'warn', msg: `${plural(unplaced.length, 'part')} not on a panel yet: ${[...new Set(unplaced.map(i => FP[i.ref].name))].join(', ')}.`, fix: 'arrange' });
   const tallest = Math.max(0, ...state.panels.base.map(i => FP[i.fp].depth));
   if (b.size[2] + tallest > inner.base) out.push({ level: 'warn', msg: `The brain (${b.size[2]}mm tall) and the deepest base part (${tallest}mm) can't stack in ${inner.base}mm. Put the brain beside that part, not under it.` });
   const cav = (s.cols * CELL - 2 * SHELL.ledge) * (s.rows * CELL - 2 * SHELL.ledge);
@@ -616,6 +694,7 @@ function bodyIssues(plan) {
   if (floorUse > cav * 0.6) out.push({ level: 'warn', msg: `The brain and battery cover ${Math.round(floorUse / cav * 100)}% of the base floor. Consider a bigger size.` });
   for (const z of bat) if (z[2] > inner.base) out.push({ level: 'err', msg: `The battery is ${z[2]}mm tall; the base only has ${inner.base}mm.` });
   if (state.body.battery === 'aa4' && b.pinFamily === 'pico') out.push({ level: 'warn', msg: 'Use rechargeable NiMH AAs (4.8V). Fresh alkaline AAs (6V) are above the Pico’s 5.5V limit.' });
+  out.push(...insideLayout().issues);
   const outer = Math.max(s.cols, s.rows) * CELL + 2 * SHELL.wall;
   if (outer > CZ_CONFIG.printBed) out.push({ level: 'warn', msg: `The shell is ${outer}mm across, bigger than a common ${CZ_CONFIG.printBed}mm print bed. Use a larger printer or a print service.` });
   return [...out, ...(plan?.issues || [])];
@@ -645,6 +724,7 @@ function renderMake() {
           <button class="btn primary" id="startScratch">Start from scratch</button>
           <label class="btn ghost fileBtn">Open a saved build<input type="file" accept=".json,.casezero" id="openFile"></label>
         </div>
+        <button class="linkBtn" id="learnHero">New to this? See how it all works in two minutes</button>
       </div>
       ${art('hero', 'Hero artwork')}
     </section>
@@ -665,6 +745,7 @@ function renderMake() {
     </section>`;
   $$('.preset').forEach(b => b.onclick = () => selectPreset(b.dataset.k));
   $('#startScratch').onclick = () => selectPreset('scratch');
+  $('#learnHero').onclick = () => openLearn();
   $('#openFile').onchange = e => openFile(e.target.files[0]);
 }
 function selectPresetSilent(k) {
@@ -676,7 +757,7 @@ function selectPresetSilent(k) {
   state.name = k === 'scratch' ? 'My build' : 'My ' + p.name;
   benchFromPreset(p);
 }
-function selectPreset(k) { selectPresetSilent(k); go('circuit'); }
+function selectPreset(k) { selectPresetSilent(k); go('circuit'); if (lvl() === 'expert') setTimeout(() => enterMode('bench'), 250); }
 
 /* ---- 2 Circuit ---- */
 function renderCircuit() {
@@ -692,9 +773,9 @@ function renderCircuit() {
     </button>
     <div class="two" style="margin-top:14px">
       <div class="card brainMini">${roleTag('brain')}<h3 style="margin-top:8px">${esc(COMP[b.id].name)}</h3>
-        <p class="small">${plan.dUsed} of ${plan.dMax} pins used · ${plan.aNeed} analog${plan.aSource !== 'board' ? ` (${plan.aSource === 'mux' ? 'mux' : 'ADS1115'} added)` : ''}</p>
+        <p class="small">${pro() ? `${plan.dUsed} of ${plan.dMax} pins used · ${plan.aNeed} analog${plan.aSource !== 'board' ? ` (${plan.aSource === 'mux' ? 'mux' : 'ADS1115'} added)` : ''}` : `${plan.dUsed} of ${plan.dMax} ${term('pin', 'doorways')} used · ${plan.aNeed} ${term('analog', 'dials')}${plan.aSource !== 'board' ? ` · ${plan.aSource === 'mux' ? term('mux', 'switchboard added') : term('ads', 'dial reader added')}` : ''}`}</p>
         ${c.cons.map(x => `<div class="warnLine">${esc(x[0].toUpperCase() + x.slice(1))}</div>`).join('')}
-        ${plan.issues.map(i => `<div class="warnLine">${esc(i.msg)}</div>`).join('')}</div>
+        ${plan.issues.length ? `<ul class="issues">${plan.issues.map(issueLi).join('')}</ul>` : ''}</div>
       <div class="card"><h3>On your bench</h3>${state.bench.length ? groups.map(([r, list]) => list.length ? `<div class="benchList">${roleTag(r)}<span>${count(list).map(([n, k]) => `${k}× ${esc(n)}`).join(' · ')}</span></div>` : '').join('') : '<p class="small">Nothing yet. Open the workbench and drag in your first part.</p>'}
         <p class="small" style="margin-top:10px">Estimated so far: <b>${money0(quickCost())}</b>. Full breakdown on the Cost step.</p></div>
     </div>`;
@@ -709,9 +790,10 @@ function renderBody() {
   const W = s.cols * CELL, H = s.rows * CELL;
   $('#v-body').innerHTML = `
     <div class="pageHead"><div><div class="eyebrow">Step 3</div><h1>Build the body</h1><p class="lead">Pick a size and style, then open the body builder and drag each part where you want it. Every cutout is drawn to scale.</p></div></div>
+    <div class="card p3dCard"><div class="p3dHead"><h3>Your device</h3><span class="small">Drag to spin · updates as you build</span></div><div class="p3d" id="p3d"></div></div>
     <div class="bodyGrid">
       <div class="stack">
-        <div class="card"><h3>Size</h3>${seg('sizeSeg', Object.entries(SIZES).map(([k, v]) => [k, `${k}<small>${v.cols * CELL}×${v.rows * CELL}</small>`]), bd.size)}
+        <div class="card"><h3>Size</h3>${seg('sizeSeg', Object.entries(SIZES).map(([k, v]) => [k, `${k}<small>${v.cols * CELL}×${v.rows * CELL}${k === 'L' ? ' deep' : ''}</small>`]), bd.size)}
           <p class="small">${s.name}: ${W + 2 * SHELL.wall}×${H + 2 * SHELL.wall}mm outside · base ${s.baseDepth}mm${bd.style === 'briefcase' ? ` · lid ${s.lidDepth}mm` : ''} deep</p></div>
         <div class="card"><h3>Style</h3>${seg('styleSeg', Object.entries(STYLES).map(([k, v]) => [k, v.name]), bd.style)}<p class="small">${STYLES[bd.style].text}</p>
           ${bd.style === 'briefcase' ? `<h4>Hinge side</h4>${seg('hingeSeg', [['back', 'Back'], ['left', 'Left'], ['right', 'Right']], bd.hinge)}` : ''}</div>
@@ -729,7 +811,7 @@ function renderBody() {
           <div class="panelsPreview">${activePanels().map(p => `<div><span class="small">${p === 'lid' ? 'Lid' : bd.style === 'box' ? 'Top panel' : 'Base'}</span><svg viewBox="-3 -3 ${W + 6} ${H + 6}">${panelSVG(p, {})}</svg></div>`).join('')}</div>
           <span class="openCta">${icon('pad')}Open the body builder</span>
         </button>
-        <div class="card"><h3>Checks</h3><ul class="issues">${issues.length ? issues.map(i => `<li class="${i.level}">${esc(i.msg)}</li>`).join('') : '<li class="ok">Everything fits.</li>'}</ul></div>
+        <div class="card"><h3>Checks</h3><ul class="issues">${issues.length ? issues.map(issueLi).join('') : '<li class="ok">Everything fits.</li>'}</ul></div>
       </div>
     </div>`;
   const bindSeg = (id, fn) => $$(`#${id} button`).forEach(bt => bt.onclick = () => fn(bt.dataset.v));
@@ -739,6 +821,7 @@ function renderBody() {
   bindSeg('latchSeg', v => { bd.latch = +v; renderBody(); });
   $$('[data-att]').forEach(cb => cb.onchange = () => { bd[cb.dataset.att] = cb.checked; renderBody(); });
   $('#openBody').onclick = () => enterMode('body');
+  preview3D($('#p3d'));
 }
 function panelSVG(panel, opts = {}) {
   const s = size(), W = s.cols * CELL, H = s.rows * CELL, bad = opts.bad || new Set();
@@ -760,6 +843,71 @@ function panelSVG(panel, opts = {}) {
 }
 
 /* ==========================================================================
+   3D PREVIEW — the exact print geometry, spun with a finger
+   ========================================================================== */
+let threeReady = null;
+function loadThree() {
+  if (window.THREE) return Promise.resolve();
+  if (!threeReady) threeReady = new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
+  return threeReady;
+}
+let view3d = null;
+function preview3D(host) {
+  if (view3d) { view3d.stop(); view3d = null; }
+  host.innerHTML = '<div class="p3dMsg">Loading 3D preview…</div>';
+  loadThree().then(() => { if (!host.isConnected) return; host.innerHTML = ''; view3d = build3D(host); })
+    .catch(() => { host.innerHTML = '<div class="p3dMsg">3D preview needs an internet connection.</div>'; });
+}
+function build3D(host, opts = {}) {
+  const T = window.THREE, s = size(), W = s.cols * CELL, H = s.rows * CELL;
+  const renderer = new T.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: !!opts.once });
+  renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+  host.appendChild(renderer.domElement);
+  const scene = new T.Scene(), cam = new T.PerspectiveCamera(35, 1, 1, 5000);
+  scene.add(new T.HemisphereLight(0xffffff, 0x6f6a58, 0.62));
+  const sun = new T.DirectionalLight(0xffffff, 0.62); sun.position.set(-200, -300, 500); scene.add(sun);
+  const geo = facets => { const g = new T.BufferGeometry(), pos = new Float32Array(facets.length * 9); facets.forEach((f, i) => f.forEach((v, j) => { pos[i * 9 + j * 3] = v[0]; pos[i * 9 + j * 3 + 1] = v[1]; pos[i * 9 + j * 3 + 2] = v[2]; })); g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.computeVertexNormals(); return g; };
+  const mat = c => new T.MeshStandardMaterial({ color: c, roughness: 0.75, metalness: 0.05, flatShading: true });
+  const shellC = 0x5d6f34, panelC = 0xd9d3c0, roleC = { senses: 0x4b5a2a, limbs: 0xa8552c, heart: 0xa63d32, brain: 0x2d4a73 };
+  const root = new T.Group(); scene.add(root);
+  const addHalf = panel => {
+    const g = new T.Group(), D = panel === 'lid' ? s.lidDepth : s.baseDepth;
+    g.add(new T.Mesh(geo(heightMesh(trayShape(panel))), mat(shellC)));
+    const pm = new T.Mesh(geo(heightMesh(panelShape(panel))), mat(panelC)); pm.position.z = D - SHELL.panel; g.add(pm);
+    for (const pl of state.panels[panel]) {
+      const role = COMP[FP[pl.fp].bom[0][0]].role, sim = COMP[FP[pl.fp].bom[0][0]].sim;
+      for (const c of cutsFor(pl.fp, pl.rot)) {
+        const cx = c.x + pl.x * CELL, cy = H - (c.y + pl.y * CELL);
+        let m;
+        if (sim === 'screen' && c.t === 'r') { m = new T.Mesh(new T.BoxGeometry(c.w, c.h, 1.2), new T.MeshStandardMaterial({ color: 0x1b2430, roughness: 0.2, metalness: 0.3 })); m.position.set(cx, cy, D + 0.2); }
+        else if (c.t === 'c' && c.d >= 5) { const tall = role === 'senses' ? (c.d > 14 ? 9 : 6) : 3; m = new T.Mesh(new T.CylinderGeometry(c.d / 2 * 0.92, c.d / 2 * 0.92, tall, 28), mat(roleC[role] || 0x6b7078)); m.rotation.x = Math.PI / 2; m.position.set(cx, cy, D + tall / 2 - 1); }
+        else if (c.t === 'p') { m = new T.Mesh(new T.BoxGeometry(c.s * 0.9, c.a * 0.9, 5), mat(roleC.senses)); const m2 = new T.Mesh(new T.BoxGeometry(c.a * 0.9, c.s * 0.9, 5), mat(roleC.senses)); m2.position.set(cx, cy, D + 1.5); g.add(m2); m.position.set(cx, cy, D + 1.5); }
+        if (m) g.add(m);
+      }
+    }
+    return g;
+  };
+  const base = addHalf('base'); root.add(base);
+  if (activePanels().includes('lid')) { const lid = addHalf('lid'); lid.rotation.x = Math.PI / 2 * 0.92; lid.position.set(0, H + s.lidDepth * 0.98 + 2, s.baseDepth + 2); root.add(lid); }
+  root.position.set(-W / 2, -H / 2, 0);
+  const pivot = new T.Group(); scene.remove(root); pivot.add(root); scene.add(pivot);
+  const hasLid = activePanels().includes('lid');
+  let yaw = -0.45, pitch = 1.0, auto = true, raf = 0, drag = null;
+  const R = Math.max(W, H) * (hasLid ? 3.1 : 2.6), tz = hasLid ? (s.baseDepth + H * 0.55) / 1.7 : s.baseDepth / 2, ty = hasLid ? H * 0.3 : 0;
+  const place = () => { cam.position.set(R * Math.sin(yaw) * Math.sin(pitch), ty - R * Math.cos(yaw) * Math.sin(pitch), tz + R * Math.cos(pitch)); cam.up.set(0, 0, 1); cam.lookAt(0, ty, tz); };
+  const fit = () => { const w = host.clientWidth || 300, h = host.clientHeight || 260; renderer.setSize(w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); };
+  const loop = () => { if (auto) yaw += 0.004; place(); renderer.render(scene, cam); raf = requestAnimationFrame(loop); };
+  const el = renderer.domElement; el.style.touchAction = 'none';
+  el.addEventListener('pointerdown', e => { auto = false; drag = [e.clientX, e.clientY, yaw, pitch]; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', e => { if (!drag) return; yaw = drag[2] - (e.clientX - drag[0]) * 0.01; pitch = clamp(drag[3] - (e.clientY - drag[1]) * 0.008, 0.25, 1.45); });
+  el.addEventListener('pointerup', () => { drag = null; });
+  if (opts.once) { fit(); place(); renderer.render(scene, cam); const url = renderer.domElement.toDataURL('image/png'); renderer.dispose(); return { url, stop() { } }; }
+  fit(); loop();
+  const ro = new ResizeObserver(fit); ro.observe(host);
+  return { stop() { cancelAnimationFrame(raf); ro.disconnect(); renderer.dispose(); } };
+}
+
+/* ==========================================================================
    BUILD MODE — full screen, stable, rail on the side, build area in the middle
    ========================================================================== */
 const modeEl = () => $('#mode');
@@ -773,7 +921,7 @@ function enterMode(kind) {
   try { history.pushState({ mode: kind }, ''); } catch (e) { }
   renderMode();
   requestAnimationFrame(() => requestAnimationFrame(() => { m.classList.add('open'); renderMode(); }));
-  if (!store.get('cz-coach-' + kind)) setTimeout(() => { if (ui.mode === kind) coach(kind); }, 500);
+  if (!store.get('cz-coach-' + kind) && ['noob', 'novice'].includes(lvl())) setTimeout(() => { if (ui.mode === kind) coach(kind); }, 500);
 }
 function exitMode(fromPop) {
   const m = modeEl(); if (!ui.mode) return;
@@ -784,6 +932,7 @@ function exitMode(fromPop) {
   if (!fromPop && history.state?.mode) { try { history.back(); } catch (e) { } }
   setTimeout(() => { if (!ui.mode) { m.hidden = true; m.querySelector('.mStage').innerHTML = ''; } }, 320);
   RENDER[state.step]?.();
+  updateMeter();
   if (kind === 'bench') toast(`${plural(state.bench.length, 'part')} on your bench`);
 }
 window.addEventListener('popstate', () => { if (ui.mode) exitMode(true); });
@@ -841,7 +990,7 @@ function benchSVG(mini, opts = {}) {
   const b = board(), plan = pinPlan();
   let g = '<g class="nerves">';
   for (const it of state.bench) {
-    const role = trayInfo(it).role, n = nervePath(it), pins = (plan.byBid[it.bid] || []).filter(p => !p.startsWith('|'));
+    const role = trayInfo(it).role, n = nervePath(it), pins = (plan.byBid[it.bid] || []).filter(p => !p.startsWith('|') && !p.startsWith('~'));
     g += `<path class="nerve n-${role} ${opts.fresh === it.bid ? 'grow' : ''}" data-nerve="${it.bid}" d="${n.d}" pathLength="1"/>`;
     if (!mini && pins.length) g += `<g class="pinTag" data-pin="${it.bid}" transform="translate(${n.lx.toFixed(1)},${n.ly.toFixed(1)})"><rect x="-21" y="-8" width="42" height="16" rx="8"/><text text-anchor="middle" y="3.5">${esc(pins[0] + (pins.length > 1 ? '+' : ''))}</text></g>`;
   }
@@ -937,14 +1086,14 @@ function renderSheet() {
   if (ui.sel === 'brain') return renderBrainSheet(sh);
   const it = ui.sel && benchItem(ui.sel);
   if (!it) { sh.innerHTML = `<div class="shIdle"><h3>How it works</h3><p>Every part needs a nerve to the brain. Drag one in and watch it connect.</p><p class="small">Tap a part to learn what it does. Drag a part onto the bin to remove it. Tap the brain to change it.</p></div>`; return; }
-  const t = trayInfo(it), plan = pinPlan(), info = plan.byBid[it.bid] || [], how = info.filter(p => p.startsWith('|')).map(p => p.slice(1));
+  const t = trayInfo(it), plan = pinPlan(), info = plan.byBid[it.bid] || [], how = info.filter(p => p.startsWith(pro() ? '|' : '~')).map(p => p.slice(1));
   const same = state.bench.filter(i => i.kind === it.kind && i.ref === it.ref).length;
   const comp = it.kind === 'fp' ? FP[it.ref].bom[0][0] : it.ref, est = options(comp, 1)[0];
   sh.innerHTML = `<button class="shClose" aria-label="Close">×</button>
     <div class="shHead">${icon(t.icon, 'big r-' + t.role)}<div><div class="shName">${esc(t.name)}</div>${roleTag(t.role)}</div></div>
     <p class="analogy">${ANALOGY[t.role]}</p>
     <p>${esc(t.desc)}</p>
-    ${how.length ? `<div class="shBlock"><div class="eyebrow">How its nerve connects</div><p class="mono">${esc(how[0])}</p></div>` : it.kind === 'heart' ? '<div class="shBlock"><div class="eyebrow">How it connects</div><p class="mono">Battery → charger → brain power pins.</p></div>' : ''}
+    ${how.length ? `<div class="shBlock"><div class="eyebrow">How its nerve connects</div><p class="${pro() ? 'mono' : ''}">${esc(how[0])}</p></div>` : it.kind === 'heart' ? '<div class="shBlock"><div class="eyebrow">How it connects</div><p class="mono">Battery → charger → brain power pins.</p></div>' : ''}
     <div class="shRow"><span>About ${money(est.cost)}${est.pack > 1 ? ` for a pack of ${est.pack}` : ''}</span><span class="small">${same} on the bench</span></div>
     ${it.kind === 'fp' && state.body.style === 'briefcase' ? `<div class="shRow"><span>Goes on the</span><div class="seg mini" id="panelPick"><button class="${it.panel === 'lid' ? 'on' : ''}" data-v="lid">Lid</button><button class="${it.panel === 'base' ? 'on' : ''}" data-v="base">Base</button></div></div>` : ''}
     <div class="shActions">${it.kind !== 'heart' ? '<button class="btn primary" id="dupBtn">Add another</button>' : ''}<button class="btn ghost" id="rmBtn">Remove</button></div>`;
@@ -963,13 +1112,13 @@ function renderBrainSheet(sh) {
     <p class="analogy">${ANALOGY.brain}</p>
     <p>${esc(why)} <span class="small">${esc(b.specs)}</span></p>
     ${c.cons.map(x => `<div class="warnLine">${esc(x[0].toUpperCase() + x.slice(1))}</div>`).join('')}
-    <div class="shBlock"><div class="eyebrow">Pins</div><div class="usage"><div><span class="small">Digital</span><div class="meter wide"><i style="width:${Math.min(100, plan.dUsed / plan.dMax * 100)}%"></i></div><span class="mono">${plan.dUsed}/${plan.dMax}</span></div>
-      <div><span class="small">Analog</span><div class="meter wide"><i style="width:${plan.aMax ? Math.min(100, plan.aNeed / plan.aMax * 100) : plan.aNeed ? 100 : 0}%"></i></div><span class="mono">${plan.aNeed}/${plan.aMax}</span></div></div></div>
+    <div class="shBlock"><div class="eyebrow">${pro() ? 'Pins' : term('pin', 'Doorways (pins)')}</div><div class="usage"><div><span class="small">${pro() ? 'Digital' : 'On/off'}</span><div class="meter wide"><i style="width:${Math.min(100, plan.dUsed / plan.dMax * 100)}%"></i></div><span class="mono">${plan.dUsed}/${plan.dMax}</span></div>
+      <div><span class="small">${pro() ? 'Analog' : 'Dials'}</span><div class="meter wide"><i style="width:${plan.aMax ? Math.min(100, plan.aNeed / plan.aMax * 100) : plan.aNeed ? 100 : 0}%"></i></div><span class="mono">${plan.aNeed}/${plan.aMax}</span></div></div></div>
     <div class="shBlock"><div class="eyebrow">How should it connect?</div><div class="chips" id="connR">${CONNS.map(([v, l]) => `<button class="chip ${state.needs.conn === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div></div>
     <div class="shBlock"><div class="eyebrow">Budget for the brain</div><div class="chips" id="budR">${BUDGETS.map(([v, s]) => `<button class="chip ${state.needs.budget === v ? 'on' : ''}" data-v="${v}"><b>${s}</b></button>`).join('')}</div></div>
-    <div class="shBlock"><div class="eyebrow">Anything else it should do?</div><div class="chips" id="extR">${EXTRAS.map(([v, l]) => `<button class="chip ${state.needs.extras.includes(v) ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div></div>
+    ${showsAll() ? '' : '<!--'}<div class="shBlock"><div class="eyebrow">Anything else it should do?</div><div class="chips" id="extR">${EXTRAS.map(([v, l]) => `<button class="chip ${state.needs.extras.includes(v) ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div></div>
     <div class="shBlock"><div class="eyebrow">Other brains</div>${ranked.map(r => `<button class="brainRow ${r.b.id === b.id ? 'on' : ''}" data-id="${r.b.id}"><span>${esc(COMP[r.b.id].name)}${r.b.id === ranked[0].b.id ? '<i>best match</i>' : ''}</span><span class="meter"><i style="width:${pct(r)}%"></i></span></button>`).join('')}
-      ${state.boardPick ? '<button class="btn small ghost" id="autoBrain">Let Nociv choose</button>' : ''}</div>`;
+      ${state.boardPick ? '<button class="btn small ghost" id="autoBrain">Let Nociv choose</button>' : ''}</div>${showsAll() ? '' : '-->'}`;
   sh.querySelector('.shClose').onclick = () => { ui.sel = null; closeSheet(); renderBenchMode(); };
   const redo = () => { ui.lastBoard = board().id; renderBenchMode(); };
   sh.querySelectorAll('#connR .chip').forEach(bt => bt.onclick = () => { state.needs.conn = bt.dataset.v; state.boardPick = null; redo(); });
@@ -1039,7 +1188,7 @@ function renderBodySheet(sh) {
   const { plan } = bom(), issues = bodyIssues(plan);
   if (!pl || !it) {
     sh.innerHTML = `<div class="shIdle"><h3>Place your parts</h3><p>Drag a part from the tray onto the panel. It snaps to the 20mm grid. Green means it fits.</p>
-      <ul class="issues">${issues.length ? issues.map(i => `<li class="${i.level}">${esc(i.msg)}</li>`).join('') : '<li class="ok">Everything fits.</li>'}</ul></div>`;
+      <ul class="issues">${issues.length ? issues.map(issueLi).join('') : '<li class="ok">Everything fits.</li>'}</ul></div>`;
     return;
   }
   const t = trayInfo(it), d = FP[pl.fp], other = pl.panel === 'lid' ? 'base' : 'lid';
@@ -1047,7 +1196,7 @@ function renderBodySheet(sh) {
   sh.innerHTML = `<button class="shClose" aria-label="Close">×</button>
     <div class="shHead">${icon(t.icon, 'big r-' + t.role)}<div><div class="shName">${esc(t.name)}</div>${roleTag(t.role)}</div></div>
     <p class="mono">${d.w * CELL}×${d.h * CELL}mm on the panel · needs ${d.depth}mm below it</p>
-    ${mineIssues.map(i => `<div class="alert ${i.level}">${esc(i.msg)}</div>`).join('')}
+    ${mineIssues.map(issueAlert).join('')}
     <div class="shActions"><button class="btn" id="rotBtn">Rotate</button>
       ${activePanels().length > 1 ? `<button class="btn" id="swapBtn">Move to ${other}</button>` : ''}
       <button class="btn ghost" id="offBtn">Take off panel</button></div>`;
@@ -1119,7 +1268,7 @@ function renderSim() {
       <div class="card simCard"><svg id="simSvg" class="${state.sim.on ? 'on' : ''}" viewBox="0 0 ${totalW} ${totalH}">${g}</svg></div>
       <div class="stack">
         <div class="card"><h3>Power</h3>
-          <div class="kv"><span>Draws about</span><b>${mA} mA</b></div>
+          <div class="kv"><span>${term('ma', 'Uses about')}</span><b>${mA} mA</b></div>
           <div class="kv"><span>Powered by</span><b>${bat ? esc(BATTERIES[state.body.battery].name) : 'USB'}</b></div>
           ${bat ? `<div class="kv"><span>Battery life</span><b>about ${hours >= 1 ? Math.round(hours * 10) / 10 + ' h' : Math.round(hours * 60) + ' min'}</b></div>` : ''}
           ${b.id === 'pi5' ? '<p class="small">The Pi 5 wants a 5V 5A USB-C supply for full power.</p>' : ''}
@@ -1165,27 +1314,28 @@ function renderParts() {
   const tab = state.costTab || 'parts';
   const forgot = lines.filter(l => COMP[l.id].forgot);
   const head = `
-    <div class="pageHead"><div><div class="eyebrow">Step 5</div><h1>Cost & order</h1><p class="lead">Everything you need in one list, so nothing shows up missing. Check off what you already own, then order it store by store.</p></div></div>
+    <div class="pageHead"><div><div class="eyebrow">Step 5</div><h1>Order & print</h1><p class="lead">Everything you need in one list, so nothing shows up missing. Check off what you already own, order store by store, then print the body.</p></div></div>
     <div class="summary">
       <div class="stat big"><span class="sLabel">Estimated cost</span><span class="sVal" data-count="${Math.round(P.total)}">${money0(P.total)}</span><span class="sSub">parts ${money0(P.parts)} · printing ${money0(P.fil.cost)}${P.proto ? ` · prototype ${money0(P.proto)}` : ''}${P.pcb ? ` · PCB ${money0(P.pcb)}` : ''} · shipping ${money0(P.ship)}${P.duty ? ` · import est. ${money0(P.duty)}` : ''}</span></div>
       <div class="stat"><span class="sLabel">Skill</span><span class="sVal">${sk.level}</span><span class="skill">${[1, 2, 3].map(i => `<i class="${i <= sk.dots ? 'on' : ''}"></i>`).join('')}</span><span class="sSub">${esc(sk.reasons.slice(0, 2).join(' · '))}</span></div>
       <div class="stat"><span class="sLabel">Time</span><span class="sVal">${tm.build}h</span><span class="sSub">+ about ${tm.print}h of printing</span></div>
       <div class="stat"><span class="sLabel">Tools (one time)</span><span class="sVal">${money0(P.tools)}</span><span class="sSub">${lines.filter(t => t.group === 'tools' && !state.have[t.id]).length} still needed</span></div>
     </div>
-    <div class="tabs" id="costTabs"><button class="${tab === 'parts' ? 'on' : ''}" data-v="parts">Parts list</button><button class="${tab === 'order' ? 'on' : ''}" data-v="order">Order checklist</button><span class="tabInk"></span></div>`;
-  $('#v-parts').innerHTML = head + `<div class="tabBody">${tab === 'parts' ? partsTab(lines, P, forgot) : orderTab(lines, P)}</div>`;
-  const ink = $('#costTabs .tabInk'), on = $('#costTabs .on'); if (ink && on) { ink.style.width = on.offsetWidth + 'px'; ink.style.transform = `translateX(${on.offsetLeft}px)`; }
+    <div class="tabs" id="costTabs"><button class="${tab === 'parts' ? 'on' : ''}" data-v="parts">Parts</button><button class="${tab === 'order' ? 'on' : ''}" data-v="order">Order</button><button class="${tab === 'print' ? 'on' : ''}" data-v="print">Print & save</button><span class="tabInk"></span></div>`;
+  $('#v-parts').innerHTML = head + `<div class="tabBody">${tab === 'parts' ? partsTab(lines, P, forgot) : tab === 'order' ? orderTab(lines, P) : printTab(lines, P)}</div>`;
+  const setInk = () => { const ink = $('#costTabs .tabInk'), on = $('#costTabs .on'); if (ink && on && on.offsetWidth) { ink.style.width = on.offsetWidth + 'px'; ink.style.transform = `translateX(${on.offsetLeft}px)`; } };
+  setInk(); requestAnimationFrame(setInk);
   $$('#costTabs button').forEach(bt => bt.onclick = () => { if (state.costTab === bt.dataset.v) return; state.costTab = bt.dataset.v; renderParts(); $('.tabBody').classList.add('swap'); });
-  bindCost();
+  bindCost(); if (tab === 'print') bindPrint();
 }
 function lineRow(l) {
   const comp = COMP[l.id], vs = comp.variants, vi = variantIdx(l.id), have = !!state.have[l.id];
   return `<div class="line ${have ? 'have' : ''}">
     <div class="lMain"><div class="lName">${esc(comp.name)}${l.qty > 1 ? ` <span class="qty">×${l.qty}</span>` : ''}${comp.forgot ? '<span class="forgotTag">easy to forget</span>' : ''}</div>
-      ${vs.length > 1 ? `<select class="variant" data-id="${l.id}">${vs.map((v, i) => `<option value="${i}" ${i === vi ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select>` : `<div class="lVar">${esc(vs[0].label)}</div>`}
+      ${vs.length > 1 && showsAll() ? `<select class="variant" data-id="${l.id}">${vs.map((v, i) => `<option value="${i}" ${i === vi ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select>` : `<div class="lVar">${esc(vs[vi].label)}</div>`}
       <div class="lWhy">${esc(l.why.join(' · '))}${l.pick.pack > 1 ? ` · comes in packs of ${l.pick.pack}` : ''}</div></div>
-    <div class="lCost"><span class="est">${have ? 'have it' : money(l.pick.cost)}</span><label class="haveBox"><input type="checkbox" data-have="${l.id}" ${have ? 'checked' : ''}> I have it</label></div>
-    <div class="lBuy">${l.opts.map(o => `<a class="buy ${o === l.pick && !have ? 'best' : ''} ${o.overseas ? 'far' : ''}" href="${esc(o.url)}" target="_blank" rel="noopener sponsored"><span>${esc(o.name)}${o === l.pick && !have ? '<i>best pick</i>' : ''}</span><small>${money(o.cost)}${o.days ? ' · ' + o.days : ''}</small></a>`).join('')}</div>
+    <div class="lCost"><span class="est">${have ? 'have it' : '~' + money(l.pick.cost)}</span><label class="haveBox"><input type="checkbox" data-have="${l.id}" ${have ? 'checked' : ''}> I have it</label></div>
+    <div class="lBuy">${l.opts.map(o => `<a class="buy ${o === l.pick && !have ? 'best' : ''} ${o.overseas ? 'far' : ''}" href="${esc(o.url)}" target="_blank" rel="noopener sponsored"><span>${esc(o.name)}${o === l.pick && !have ? '<i>best pick</i>' : ''}</span><small>${o.store === 'az' ? 'see price' : money(o.cost)}${o.days ? ' · ' + o.days : ''}</small></a>`).join('')}</div>
   </div>`;
 }
 function partsTab(lines, P, forgot) {
@@ -1200,15 +1350,15 @@ function partsTab(lines, P, forgot) {
     <div class="card priceCard">
       <div><h3>Adjust by price</h3><p class="small">Swaps every part to its cheapest or best version. You can still change any single part below.</p></div>
       <div class="seg" id="priceMode">${[['save', 'Save money'], ['bal', 'Balanced'], ['best', 'Best quality']].map(([v, l]) => `<button class="${state.priceMode === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>
-      <label class="overseas"><span class="switch"><input type="checkbox" id="overseasT" ${state.overseas ? 'checked' : ''}><span></span></span>
-        <span><b>Include overseas stores</b><span class="small">AliExpress and LCSC. Often cheaper, but 1 to 4 weeks slower. US imports no longer have a duty-free limit, so we add an estimated ${Math.round(CZ_CONFIG.importEstimate * 100)}% for import charges. Your checkout shows the real amount.</span></span></label>
+      ${showsAll() ? '' : '<!--'}<label class="overseas"><span class="switch"><input type="checkbox" id="overseasT" ${state.overseas ? 'checked' : ''}><span></span></span>
+        <span><b>Include overseas stores</b><span class="small">AliExpress and LCSC. Often cheaper, but 1 to 4 weeks slower. US imports no longer have a duty-free limit, so we add an estimated ${Math.round(CZ_CONFIG.importEstimate * 100)}% for import charges. Your checkout shows the real amount.</span></span></label>${showsAll() ? '' : '-->'}
     </div>
     ${roleOrder.map(r => { const L = parts.filter(l => COMP[l.id].role === r); if (!L.length) return ''; const tot = L.reduce((a, l) => a + (state.have[l.id] ? 0 : l.pick.cost), 0);
       return `<details class="card group g-${r}" ${['brain', 'senses', 'limbs'].includes(r) ? 'open' : ''}><summary class="groupHead">${roleTag(r)}<span class="small">${ROLES[r].what}</span><span class="gTot">${money0(tot)}</span></summary>${L.map(lineRow).join('')}</details>`; }).join('')}
     ${proto.length ? `<details class="card group g-nerves"><summary class="groupHead"><span class="role role-nerves">Prototype</span><span class="small">for testing on a breadboard</span><span class="gTot">${money0(P.proto)}</span></summary>${proto.map(lineRow).join('')}</details>` : ''}
     <details class="card group g-tools"><summary class="groupHead">${roleTag('tools')}<span class="small">one time, not in the estimate</span><span class="gTot">${money0(P.tools)}</span></summary>${tools.map(lineRow).join('')}</details>
     <div class="card note">
-      <p><b>Where these numbers come from.</b> Prices are Nociv estimates from typical store prices (${CZ_CONFIG.priceDate}), not live prices. The best pick is the cheapest way to buy the quantity you need, counting pack sizes and shipping. Always check the store before you buy.</p>
+      <p><b>Where these numbers come from.</b> Every cost is a Nociv estimate for that kind of part (${CZ_CONFIG.priceDate}), not a store's live price. Amazon shows its current price when you open the link. The best pick is the cheapest way to buy the quantity you need, counting pack sizes and shipping. Always check the store before you buy.</p>
       <p class="small">As an Amazon Associate, Nociv earns from qualifying purchases. Some links may earn Nociv a small commission at no cost to you.</p>
     </div>`;
 }
@@ -1223,11 +1373,11 @@ function orderTab(lines, P) {
       <div class="progress"><i style="width:${buy.length ? done / buy.length * 100 : 100}%"></i></div>
       <div class="row"><button class="btn small" id="csvBtn">Download full list (CSV)</button></div></div>
     ${groups.map(g => { const sub = g.items.reduce((a, l) => a + l.pick.cost, 0), ship = CZ_CONFIG.shipping[Object.keys(STORES).find(k => STORES[k].name === g.name)] ?? CZ_CONFIG.shipping.other;
-      return `<div class="card storeCard"><div class="storeHead"><div><h3>${esc(g.name)}</h3><span class="small">${plural(g.items.length, 'item')} · ${money0(sub)} + about ${money0(ship)} shipping${g.days ? ' · arrives in ' + g.days : ''}</span>${g.overseas ? '<span class="small warnTxt">Import charges may be added at checkout or collected before delivery.</span>' : ''}</div>
+      return `<div class="card storeCard"><div class="storeHead"><div><h3>${esc(g.name)}</h3><span class="small">${plural(g.items.length, 'item')} · ${g.name === 'Amazon' ? 'Nociv estimate ~' : ''}${money0(sub)} + about ${money0(ship)} shipping${g.days ? ' · arrives in ' + g.days : ''}</span>${g.overseas ? '<span class="small warnTxt">Import charges may be added at checkout or collected before delivery.</span>' : ''}</div>
         <button class="btn small ghost" data-copy="${esc(g.name)}">Copy list</button></div>
         ${g.items.map(l => `<label class="orderRow ${state.ordered[l.id] ? 'done' : ''}"><input type="checkbox" data-ordered="${l.id}" ${state.ordered[l.id] ? 'checked' : ''}>
           <span class="oName">${esc(COMP[l.id].name)}${l.pick.packs > 1 ? ` <span class="qty">×${l.pick.packs} packs</span>` : l.qty > 1 && l.pick.pack === 1 ? ` <span class="qty">×${l.qty}</span>` : ''}<small>${esc(variant(l.id).label)}${l.group === 'tools' ? ' · tool' : ''}</small></span>
-          <span class="oCost">${money(l.pick.cost)}</span><a class="btn small primary" href="${esc(l.pick.url)}" target="_blank" rel="noopener sponsored">Open</a></label>`).join('')}
+          <span class="oCost">${l.pick.store === 'az' ? 'see price' : money(l.pick.cost)}</span><a class="btn small primary" href="${esc(l.pick.url)}" target="_blank" rel="noopener sponsored">Open</a></label>`).join('')}
       </div>`; }).join('')}
     <p class="small">Links open a search for the exact part. Pick a listing that matches the description and quantity.</p>`;
 }
@@ -1269,7 +1419,7 @@ function pyAnalog(p, esp) {
 }
 function genMicroPython(b, parts, plan, map) {
   const esp = b.pinFamily === 'esp', L = [], setup = [], loop = [], notes = [];
-  L.push(`# ${state.name}: starter code from Case Zero Builder (nociv.co)`, `# Brain: ${COMP[b.id].name}. This checks every part you wired.`, `# Press buttons and turn knobs, then watch the messages in the Shell window.`, '');
+  L.push(`# ${state.name}: starter code from Case Zero Builder (nociv.co)`, `# Brain: ${COMP[b.id].name}. This checks every part you wired.`, `# Press buttons and turn knobs, then watch the messages in the Shell window.`, '#', '# Try this:', '#   Change time.sleep_ms(20) at the bottom to 500. The brain now checks only twice a second. Feel the delay?', ...(parts.some(p => ['knob', 'slider'].includes(p.kind)) ? ['#   Change the 2 in changed(..., value, 2) to 20. Now it only reports big turns.'] : []), ...(parts.some(p => ['led', 'strip'].includes(p.kind)) ? ['#   Change a 40 in colors to 200 for brighter light.'] : []), '');
   const imp = new Set(['from machine import Pin, ADC', 'import time']);
   const hasMux = parts.some(p => p.pins?.some(x => x.mux != null)), hasAds = parts.some(p => p.pins?.some(x => x.ads));
   if (plan.bus.includes('i2c')) { imp.add('from machine import I2C'); setup.push(`i2c = I2C(0, sda=Pin(${map.i2c.SDA}), scl=Pin(${map.i2c.SCL}))`, `print('I2C parts found:', [hex(a) for a in i2c.scan()])  # screens and sensors show up here`); }
@@ -1319,7 +1469,7 @@ function genMicroPython(b, parts, plan, map) {
 function genArduino(b, parts, plan, map) {
   const L = [], setup = [], loop = [], globals = [], notes = [];
   const pin = p => p.analogName || p.n;
-  L.push(`// ${state.name}: starter code from Case Zero Builder (nociv.co)`, `// Brain: ${COMP[b.id].name}. This checks every part you wired.`, '// Open Tools > Serial Monitor at 115200 baud, then press buttons and turn knobs.', '');
+  L.push(`// ${state.name}: starter code from Case Zero Builder (nociv.co)`, `// Brain: ${COMP[b.id].name}. This checks every part you wired.`, '// Open Tools > Serial Monitor at 115200 baud, then press buttons and turn knobs.', '//', '// Try this:', '//   Change delay(20) at the bottom to 500. The brain now checks only twice a second. Feel the delay?', ...(parts.some(p => ['knob', 'slider'].includes(p.kind)) ? ['//   Change the "> 2" in a knob line to "> 20". Now it only reports big turns.'] : []), '');
   const strip = parts.find(p => p.kind === 'strip');
   if (plan.bus.includes('i2c')) L.push('#include <Wire.h>');
   if (strip) { L.push('#include <Adafruit_NeoPixel.h>  // install "Adafruit NeoPixel" from the Library Manager'); globals.push(`Adafruit_NeoPixel ${strip.name}(60, ${pin(strip.pins[0])}, NEO_GRB + NEO_KHZ800);`); }
@@ -1357,7 +1507,7 @@ function genArduino(b, parts, plan, map) {
 }
 function genGpiozero(b, parts, plan) {
   const L = [], notes = [];
-  L.push(`# ${state.name}: starter code from Case Zero Builder (nociv.co)`, `# Brain: ${COMP[b.id].name}. Run it with: python3 starter.py`, '');
+  L.push(`# ${state.name}: starter code from Case Zero Builder (nociv.co)`, `# Brain: ${COMP[b.id].name}. Run it with: python3 starter.py`, ...(parts.some(p => p.kind === 'led') ? ['#', '# Try this: in react(), change .toggle() to .blink() and press a button.'] : []), '');
   L.push('from gpiozero import Button, LED, RotaryEncoder', 'from signal import pause', '');
   const leds = parts.filter(p => p.kind === 'led'), body = [];
   for (const p of parts) {
@@ -1377,6 +1527,42 @@ function genGpiozero(b, parts, plan) {
   L.push('', `print('${state.name.replace(/'/g, '')} is alive. Press Ctrl+C to stop.')`, 'pause()', '');
   return L.join('\n');
 }
+/* Wokwi diagram.json: the same parts, wired to the same pins as the starter code. */
+function wokwiDiagram() {
+  const b = board(), W = WOKWI_BOARD[b.id]; if (!W) return null;
+  const { plan, parts } = codeParts(), map = PINMAPS[b.pinFamily];
+  const P = x => `${W.id}:${W.pin(x)}`, gnd = `${W.id}:${W.gnd}`, vcc = `${W.id}:${W.v}`;
+  const diag = { version: 1, author: 'Case Zero Builder (nociv.co)', editor: 'wokwi', parts: [{ type: W.type, id: W.id, top: 0, left: 0, attrs: W.attrs || {} }], connections: [], dependencies: {} };
+  if (W.id === 'esp' || W.id === 'uno') diag.connections.push([`${W.id}:TX`, '$serialMonitor:RX', '', []], [`${W.id}:RX`, '$serialMonitor:TX', '', []]);
+  let n = 0; const skipped = [];
+  const spot = () => { const i = n++; return { left: 260 + (i % 4) * 130, top: -40 + Math.floor(i / 4) * 140 }; };
+  const add = (type, id, attrs = {}) => { diag.parts.push({ type, id, ...spot(), attrs }); return id; };
+  const wire = (a, c, color) => diag.connections.push([a, c, color, []]);
+  const pinOf = x => x.mux != null || x.ads ? null : (x.analogName || (x.n != null ? (W.id === 'uno' ? String(x.n) : x.raw) : null));
+  const direct = x => { const v = pinOf(x); return v == null ? null : P(v); };
+  for (const p of parts) {
+    const pins = p.pins || [];
+    if (['button'].includes(p.kind)) { const id = add('wokwi-pushbutton', p.name, { color: 'green' }); const a = direct(pins[0]); if (a) { wire(`${id}:1.l`, a, 'green'); wire(`${id}:2.l`, gnd, 'black'); } }
+    else if (p.kind === 'switch') { const id = add('wokwi-slide-switch', p.name); const a = direct(pins[0]); if (a) { wire(`${id}:2`, a, 'green'); wire(`${id}:1`, gnd, 'black'); } }
+    else if (['knob', 'pad', 'soil'].includes(p.kind) || p.kind === 'slider') {
+      const id = add(p.kind === 'slider' ? 'wokwi-slide-potentiometer' : 'wokwi-potentiometer', p.name); const a = direct(pins[0]);
+      wire(`${id}:VCC`, vcc, 'red'); wire(`${id}:GND`, gnd, 'black'); if (a) wire(`${id}:SIG`, a, 'green'); else if (pins[0]?.mux == null) skipped.push(p.label);
+    }
+    else if (p.kind === 'encoder') { const id = add('wokwi-ky-040', p.name); [['CLK', 0], ['DT', 1], ['SW', 2]].forEach(([k, i]) => { const a = direct(pins[i]); if (a) wire(`${id}:${k}`, a, 'green'); }); wire(`${id}:VCC`, vcc, 'red'); wire(`${id}:GND`, gnd, 'black'); }
+    else if (p.kind === 'stick') { const id = add('wokwi-analog-joystick', p.name); const x = direct(pins[0]), y = direct(pins[1]), sw = direct(pins[2]); if (x) wire(`${id}:HORZ`, x, 'green'); else if (pins[0]?.mux == null) skipped.push(p.label); if (y) wire(`${id}:VERT`, y, 'green'); if (sw) wire(`${id}:SEL`, sw, 'green'); wire(`${id}:VCC`, vcc, 'red'); wire(`${id}:GND`, gnd, 'black'); }
+    else if (p.kind === 'joy') ['up', 'down', 'left', 'right'].forEach((d, i) => { const id = add('wokwi-pushbutton', `${p.name}_${d}`, { color: 'black' }); const a = direct(pins[i]); if (a) { wire(`${id}:1.l`, a, 'green'); wire(`${id}:2.l`, gnd, 'black'); } });
+    else if (p.kind === 'led') { const id = add('wokwi-led', p.name, { color: 'red' }), r = add('wokwi-resistor', p.name + '_r', { value: '330' }); const a = direct(pins[0]); if (a) wire(`${r}:1`, a, 'orange'); wire(`${r}:2`, `${id}:A`, 'orange'); wire(`${id}:C`, gnd, 'black'); }
+    else if (p.kind === 'strip') { const id = add('wokwi-led-ring', p.name, { pixels: '16' }); const a = direct(pins[0]); if (a) wire(`${id}:DIN`, a, 'orange'); wire(`${id}:VCC`, vcc, 'red'); wire(`${id}:GND`, gnd, 'black'); }
+    else if (p.kind === 'note') {
+      const r = p.r;
+      if (r.id === 'oled' && plan.bus.includes('i2c')) { const id = add('board-ssd1306', 'oled'); wire(`${id}:SDA`, P(map.i2c.SDA), 'blue'); wire(`${id}:SCL`, P(map.i2c.SCL), 'purple'); wire(`${id}:VCC`, vcc, 'red'); wire(`${id}:GND`, gnd, 'black'); }
+      else if (['tft24', 'tft35'].includes(r.id) && plan.bus.includes('spi')) { const id = add('wokwi-ili9341', 'screen'); const [, cs, dc, rst] = r.pins; wire(`${id}:SCK`, P(map.spi.SCK), 'purple'); wire(`${id}:MOSI`, P(map.spi.MOSI), 'blue'); wire(`${id}:MISO`, P(map.spi.MISO), 'cyan');
+        [['CS', cs], ['D/C', dc], ['RST', rst]].forEach(([k, v]) => { if (v && v !== '—') wire(`${id}:${k}`, P(W.id === 'uno' ? String(v).replace(/^D/, '') : v), 'green'); }); wire(`${id}:VCC`, vcc, 'red'); wire(`${id}:GND`, gnd, 'black'); }
+      else if (!['mux16', 'ads1115', 'usbc', 'jack'].includes(r.id)) skipped.push(r.label.replace(/ \(.*\)$/, ''));
+    }
+  }
+  return { json: JSON.stringify(diag, null, 2), skipped: [...new Set(skipped)], mux: plan.aSource !== 'board' };
+}
 function starterCode() {
   const b = board(), t = BOARD_TOOLS[b.id], { plan, parts } = codeParts(), map = PINMAPS[b.pinFamily];
   if (t.lang === 'MicroPython') return { lang: 'MicroPython', file: 'main.py', code: genMicroPython(b, parts, plan, map) };
@@ -1386,7 +1572,10 @@ function starterCode() {
 }
 function renderProto() {
   ensureLayout();
-  const plan = pinPlan(), b = board(), bd = COMP[b.id].name, pr = state.proto, t = BOARD_TOOLS[b.id], sc = starterCode();
+  const plan = pinPlan(), b = board(), bd = COMP[b.id].name, pr = state.proto, t = BOARD_TOOLS[b.id], sc = starterCode(), wd = wokwiDiagram();
+  const { lines } = bom(), mA = lines.filter(l => l.group === 'parts').reduce((a, l) => a + (COMP[l.id].mA || 0) * l.qty, 0);
+  const batId = BATTERIES[state.body.battery].comps[0], bat = batId && COMP[batId];
+  const hours = bat ? (b.linux ? bat.mAh * bat.volt * 0.85 / (5 * mA) : bat.mAh * 0.85 / mA) : 0;
   const q = (PRESETS[state.preset] && state.preset !== 'scratch' ? PRESETS[state.preset].name : state.funcs.slice(0, 2).map(f => FL[f].short).join(' ')) + ' ' + bd.replace('Raspberry Pi ', '');
   const station = (key, n, title, text, body, locked) => `
     <div class="station ${pr[key] || locked ? 'on' : ''}">
@@ -1394,62 +1583,79 @@ function renderProto() {
         ${locked ? '<span class="pill">always</span>' : `<label class="switch"><input type="checkbox" data-st="${key}" ${pr[key] ? 'checked' : ''}><span></span></label>`}</div>
       ${pr[key] || locked ? `<div class="stBody">${body}</div>` : ''}
     </div>`;
-  const wiring = `<div class="tableWrap"><table class="wire"><thead><tr><th>Part</th><th>Signal</th><th>Connect it</th></tr></thead><tbody>${plan.rows.map(r => `<tr><td><span class="dot d-${r.role}"></span>${esc(r.label)}</td><td class="mono">${esc(r.signal)}</td><td>${esc(r.how)}</td></tr>`).join('')}</tbody></table></div>`;
+  const wiring = `<div class="tableWrap"><table class="wire"><thead><tr><th>Part</th><th>${pro() ? 'Signal' : 'Talks by'}</th><th>${pro() ? 'Connect it' : 'How to connect it'}</th></tr></thead><tbody>${plan.rows.map(r => `<tr><td><span class="dot d-${r.role}"></span>${esc(r.label)}</td><td class="mono">${sigText(r.signal)}</td><td>${howText(r)}</td></tr>`).join('')}</tbody></table></div>`;
   $('#v-proto').innerHTML = `
-    <div class="pageHead"><div><div class="eyebrow">Step 6</div><h1>Code & test</h1><p class="lead">Your starter code is written for your exact wiring. Try it free in a simulator, then on your real board. For bigger ideas, borrow from projects other makers already shared.</p></div></div>
-    ${plan.issues.map(i => `<div class="alert ${i.level}">${esc(i.msg)}</div>`).join('')}
+    <div class="pageHead"><div><div class="eyebrow">Step 4</div><h1>Test it</h1><p class="lead">Your starter code and simulator are made for your exact wiring. Run it free in your browser before you buy anything, then on your real board.</p></div></div>
+    ${plan.issues.map(issueAlert).join('')}
     <div class="codeGrid">
       <div class="card codeCard">
-        <div class="codeHead"><div><h3>Starter code</h3><span class="small">${sc ? `${esc(sc.lang)} · ${esc(sc.file)} · tests every part` : esc(t.lang)}</span></div>
+        <div class="codeHead"><div><h3>${term('code', 'Starter code')}</h3><span class="small">${sc ? `${sc.lang === 'MicroPython' ? term('micropython', 'MicroPython') : esc(sc.lang)} · ${esc(sc.file)} · checks every part` : esc(t.lang)}</span></div>
           ${sc ? '<div class="row"><button class="btn small" id="copyCode">Copy</button><button class="btn small ghost" id="dlCode">Download</button></div>' : ''}</div>
         ${sc ? `<pre class="code"><code>${esc(sc.code)}</code></pre>` : `<p>The Daisy is programmed in C++. The fastest start is loading a ready-made example with the Daisy web programmer, then changing it.</p>`}
       </div>
       <div class="stack">
-        ${t.sim ? `<div class="card toolCard"><div class="eyebrow">Free · no parts needed</div><h3>Try it in Wokwi</h3>
-          <ol class="checks tight"><li>Open a new ${esc(t.lang)} project.</li><li>Paste your starter code into <span class="mono">${sc ? esc(sc.file === 'main.py' ? 'main.py' : 'sketch.ino') : ''}</span>.</li><li>Add the same parts with the + button and wire them like the table below.</li><li>Press play.</li></ol>
-          <a class="btn primary" href="${t.sim}" target="_blank" rel="noopener">Open Wokwi</a>${t.simNote ? `<p class="small">${esc(t.simNote)}</p>` : ''}</div>` : `<div class="card toolCard"><h3>Simulator</h3><p class="small">Browser simulators don't cover the ${esc(bd)} yet. Test on the real board with the steps below.</p></div>`}
+        ${t.sim && wd && sc ? `<div class="card toolCard simCard2"><div class="eyebrow">Free · no parts needed · 1 minute</div><h3>Run your build in a free ${term('simulator', 'simulator')}</h3>
+          <ol class="steps2">
+            <li><a class="btn primary small" href="${t.sim}" target="_blank" rel="noopener">1 · Open Wokwi</a></li>
+            <li><button class="btn small" id="copyCode2">2 · Copy code</button><span class="small">Paste it over everything in <span class="mono">${sc.file === 'main.py' ? 'main.py' : 'sketch.ino'}</span></span></li>
+            <li><button class="btn small" id="copyDiag">3 · Copy wiring</button><span class="small">Paste it over everything in <span class="mono">diagram.json</span></span></li>
+            <li><span class="stepPlay">4 · Press the green play button</span><span class="small">Click the parts to press and turn them.</span></li>
+          </ol>
+          ${wd.mux ? '<p class="small">Wokwi has no analog mux part, so knobs that go through the mux read 0 in the simulator. Everything else works; on your real board they all read.</p>' : ''}
+          ${wd.skipped.length ? `<p class="small">Not in the simulator: ${esc(wd.skipped.join(', '))}.</p>` : ''}
+          ${t.simNote ? `<p class="small">${esc(t.simNote)}</p>` : ''}</div>` : `<div class="card toolCard"><h3>Simulator</h3><p class="small">Browser simulators don't cover the ${esc(bd)} yet. Test on the real board with the steps below.</p></div>`}
+        <div class="card toolCard"><h3>Power</h3>
+          <div class="kv"><span>${term('ma', 'Uses about')}</span><b>${mA} mA</b></div>
+          <div class="kv"><span>Powered by</span><b>${bat ? esc(BATTERIES[state.body.battery].name) : 'USB'}</b></div>
+          ${bat ? `<div class="kv"><span>Battery life</span><b>about ${hours >= 1 ? Math.round(hours * 10) / 10 + ' h' : Math.round(hours * 60) + ' min'}</b></div>` : ''}
+          <p class="small">Rough estimate from typical draw. Screens, sound and Wi-Fi use change it.</p></div>
         <div class="card toolCard"><h3>On your real board</h3><ol class="checks tight">${t.setup.map(([l, u]) => `<li><a href="${u}" target="_blank" rel="noopener">${esc(l)}</a></li>`).join('')}<li>Load your starter code and watch for the messages.</li></ol></div>
         <div class="card toolCard"><h3>Projects like this</h3><p class="small">Real builds other makers shared, with their code.</p><div class="row">${PROJECT_SEARCH.map(([n, u]) => `<a class="btn small ghost" href="${u(q)}" target="_blank" rel="noopener">${n}</a>`).join('')}</div></div>
       </div>
     </div>
     <h2 class="secHead">Build it for real</h2>
     <div class="line4">
-      ${station('breadboard', 1, 'Breadboard first', 'Push wires into a breadboard. Nothing is permanent.', `${wiring}
+      ${station('breadboard', 1, term('breadboard', 'Breadboard first'), 'Push wires into a breadboard. Nothing is permanent.', `${wiring}
         <ol class="checks"><li>Wire the brain's power and ground first, then one part at a time.</li><li>Run the starter code after each part. It tells you when it sees a press or a turn.</li><li>If a part stays quiet, check the wire against the table. Most problems are a loose wire or a swapped pin.</li></ol>`)}
-      ${station('pcb', 2, 'Make a circuit board (optional)', 'Turn the breadboard into a real board you order online.', `
+      ${showsDeep() ? '' : '<!--'}${station('pcb', 2, 'Make a circuit board (optional)', 'Turn the breadboard into a real board you order online.', `
         <ol class="checks"><li>Draw the schematic in <a href="https://www.kicad.org" target="_blank" rel="noopener">KiCad</a> or <a href="https://easyeda.com" target="_blank" rel="noopener">EasyEDA</a> (both free). Copy the connections from the table above.</li>
-        <li>Lay out the board, then export Gerber files.</li><li>Upload them to <a href="https://jlcpcb.com" target="_blank" rel="noopener">JLCPCB</a> for a live quote. Five small boards usually cost a few dollars plus shipping.</li></ol>`)}
-      ${station('final', 3, 'Final wiring', 'How the nerves live inside the body.', `<div class="chips" id="finalR">${[['perf', 'Perfboard (solder it by hand)'], ['pcb', 'My own circuit board'], ['jumper', 'Keep jumper wires']].map(([v, l]) => `<button class="chip ${pr.final === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`, true)}
+        <li>Lay out the board, then export Gerber files.</li><li>Upload them to <a href="https://jlcpcb.com" target="_blank" rel="noopener">JLCPCB</a> for a live quote. Five small boards usually cost a few dollars plus shipping.</li></ol>`)}${showsDeep() ? '' : '-->'}
+      ${station('final', showsDeep() ? 3 : 2, 'Final wiring', 'How the nerves live inside the body.', `<div class="chips" id="finalR">${[['perf', 'Perfboard (solder it by hand)'], ['pcb', 'My own circuit board'], ['jumper', 'Keep jumper wires']].map(([v, l]) => `<button class="chip ${pr.final === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`, true)}
     </div>`;
   $$('[data-st]').forEach(cb => cb.onchange = () => { pr[cb.dataset.st] = cb.checked; if (cb.dataset.st === 'pcb' && cb.checked && pr.final === 'perf') pr.final = 'pcb'; renderProto(); });
   $$('#finalR .chip').forEach(c => c.onclick = () => { pr.final = c.dataset.v; renderProto(); });
   if (sc) { $('#copyCode').onclick = () => copyText(sc.code, 'Code copied'); $('#dlCode').onclick = () => download(sc.file, sc.code); }
+  const c2 = $('#copyCode2'); if (c2) c2.onclick = () => { copyText(sc.code, 'Code copied. Paste it into ' + (sc.file === 'main.py' ? 'main.py' : 'sketch.ino')); c2.classList.add('did'); };
+  const cd = $('#copyDiag'); if (cd) cd.onclick = () => { copyText(wd.json, 'Wiring copied. Paste it into diagram.json'); cd.classList.add('did'); };
 }
 
-/* ---- 7 Save & print ---- */
-function renderSave() {
-  ensureLayout();
-  const { lines, plan } = bom(), P = priceBom(lines), s = size(), issues = bodyIssues(plan), errs = issues.filter(i => i.level === 'err');
-  const outer = `${s.cols * CELL + 2 * SHELL.wall}×${s.rows * CELL + 2 * SHELL.wall}mm`;
+/* ---- Print & save (tab on Order & print) ---- */
+function printTab(lines, P) {
+  const { plan } = bom(), s = size(), issues = bodyIssues(plan), errs = issues.filter(i => i.level === 'err');
+  const outer = `${s.cols * CELL + 2 * SHELL.wall}×${s.rows * CELL + 2 * SHELL.wall}mm`, card = fitCardShape();
   const files = [];
-  for (const p of activePanels()) { files.push(['tray-' + p, `${p === 'lid' ? 'Lid' : 'Base'} shell`, `${outer}, ${p === 'lid' ? s.lidDepth : s.baseDepth}mm tall`]); files.push(['panel-' + p, `${p === 'lid' ? 'Lid' : 'Base'} panel`, '3mm plate with cutouts']); }
-  $('#v-save').innerHTML = `
-    <div class="pageHead"><div><div class="eyebrow">Step 7</div><h1>Save & print</h1><p class="lead">${esc(state.name)} · ${s.name} ${STYLES[state.body.style].name.toLowerCase()} · ${esc(COMP[board().id].name)} · about ${money0(P.total)}</p></div></div>
+  for (const p of activePanels()) { files.push(['tray-' + p, `${p === 'lid' ? 'Lid' : 'Base'} shell`, `${outer}, ${p === 'lid' ? s.lidDepth : s.baseDepth}mm tall${p === 'base' ? ' · brain cradle + cable notch' : ''}`]); files.push(['panel-' + p, `${p === 'lid' ? 'Lid' : 'Base'} panel`, '3mm plate with cutouts']); }
+  return `
     ${errs.length ? `<div class="alert err">${plural(errs.length, 'problem')} to fix in Body before printing. You can still download.</div>` : ''}
+    <div class="card memberCard"><div><div class="eyebrow">Nociv official builder</div><h3>Your builder card</h3><p class="small">A member card for this build with your photo, name and stats. Save it or print it at ID size.</p></div><button class="btn primary" id="cardBtn">Make my card</button></div>
+    <div class="card fitCard"><div class="eyebrow">Print this first · about 15 minutes</div><h3>${term('fitcard', 'Fit test card')}</h3>
+      <p>A thin plate with one of every hole in your build (${card.W}×${card.H}mm). Push your real parts into it. If one is too tight or loose, you find out before the 8-hour print, not after.</p>
+      <button class="btn primary" data-stl="fit-card">Download fit test card .stl</button></div>
     <div class="two">
-      <div class="card"><h3>Your build file</h3><p class="small">Saves everything, like a Tinkercad project. Open it here any time to keep working.</p>
-        <label class="field">Name<input id="saveName" value="${esc(state.name)}" maxlength="40"></label>
-        <div class="row"><button class="btn primary" id="saveBtn">Save build file</button><label class="btn ghost fileBtn">Open build file<input type="file" accept=".json,.casezero" id="openFile2"></label><button class="btn ghost" id="linkBtn">Copy share link</button></div></div>
-      <div class="card"><h3>Print files (STL)</h3><p class="small">Free to print. Open them in a slicer, or import into Tinkercad to change them.</p>
+      <div class="card"><h3>Print files (${term('stl', 'STL')})</h3><p class="small">Free to print. Open them in a slicer, or import into Tinkercad to change them.</p>
         <div class="files">${files.map(([k, t, d]) => `<button class="fileRow" data-stl="${k}"><b>${t}</b><span>${d}</span></button>`).join('')}</div>
         <p class="small">Filament: about ${P.fil.grams}g of PLA (${money(P.fil.cost)}), roughly ${P.fil.hours}h of printing.</p></div>
+      <div class="card"><h3>Your build file</h3><p class="small">Saves everything, like a Tinkercad project, including what you've ordered. Open it here any time to keep working.</p>
+        <label class="field">Name<input id="saveName" value="${esc(state.name)}" maxlength="40"></label>
+        <div class="row"><button class="btn primary" id="saveBtn">Save build file</button><label class="btn ghost fileBtn">Open build file<input type="file" accept=".json,.casezero" id="openFile2"></label><button class="btn ghost" id="linkBtn">Copy share link</button></div></div>
     </div>
-    <div class="card"><h3>How to print it</h3>
+    <div class="card"><h3>How to print and put it together</h3>
       <ol class="checks">
-        <li>Open each STL in a free slicer: <a href="https://ultimaker.com/software/ultimaker-cura/" target="_blank" rel="noopener">Cura</a>, <a href="https://www.prusa3d.com/page/prusaslicer_424/" target="_blank" rel="noopener">PrusaSlicer</a> or <a href="https://github.com/SoftFever/OrcaSlicer" target="_blank" rel="noopener">OrcaSlicer</a>.</li>
-        <li>Shells print open side up and panels print flat. No supports needed.</li>
-        <li>Start with PLA or PETG, 0.2mm layers, 3 walls, 20% infill.</li>
-        <li>Press a magnet into each corner pocket with a drop of super glue. Glue a steel disc under each panel corner.</li>
+        <li>Print the fit test card and check every part fits.</li>
+        <li>Open each STL in a free ${term('slicer', 'slicer')}: <a href="https://ultimaker.com/software/ultimaker-cura/" target="_blank" rel="noopener">Cura</a>, <a href="https://www.prusa3d.com/page/prusaslicer_424/" target="_blank" rel="noopener">PrusaSlicer</a> or <a href="https://github.com/SoftFever/OrcaSlicer" target="_blank" rel="noopener">OrcaSlicer</a>. Shells print open side up, panels print flat. No supports needed.</li>
+        <li>Start with PLA or PETG, 0.2mm layers, 3 walls, ${term('infill', '20% infill')}.</li>
+        <li>Press a ${term('magnets', 'magnet')} into each corner pocket with a drop of super glue. Glue a steel disc under each panel corner.</li>
+        <li>Drop the brain into its cradle with the USB port facing the notch${state.body.battery !== 'none' ? ', and the battery into its pocket' : ''}.</li>
         <li>Mark and drill 2mm pilot holes for the hinges, latch and handle, then screw them on.</li>
       </ol>
       <p class="small">Outside size ${outer}. ${Math.max(s.cols, s.rows) * CELL + 2 * SHELL.wall > CZ_CONFIG.printBed ? `That is bigger than a ${CZ_CONFIG.printBed}mm bed.` : `Fits a ${CZ_CONFIG.printBed}mm bed.`}</p></div>
@@ -1457,14 +1663,19 @@ function renderSave() {
       <div class="card"><h3>No printer?</h3><p>Many city libraries and makerspaces offer 3D printing for a small fee. Bring the STL files on a USB stick.</p>
         <p class="small">Online print services like Craftcloud or JLC3DP also print from STL and ship to you.</p>
         <button class="btn" disabled>Order a printed shell from Nociv · coming soon</button></div>
-      <div class="card"><h3>Panels in metal or acrylic</h3><p>Download the panels as DXF and upload them to <a href="https://sendcutsend.com" target="_blank" rel="noopener">SendCutSend</a> to laser-cut them in aluminum, steel or acrylic. They cut flat sheets, not 3D prints.</p>
-        <div class="row">${activePanels().map(p => `<button class="btn ghost" data-dxf="${p}">${p === 'lid' ? 'Lid' : 'Base'} panel .dxf</button>`).join('')}</div></div>
+      ${showsDeep() ? '' : '<!--'}<div class="card"><h3>Panels in metal or acrylic</h3><p>Download the panels as DXF and upload them to <a href="https://sendcutsend.com" target="_blank" rel="noopener">SendCutSend</a> to laser-cut them in aluminum, steel or acrylic. They cut flat sheets, not 3D prints.</p>
+        <div class="row">${activePanels().map(p => `<button class="btn ghost" data-dxf="${p}">${p === 'lid' ? 'Lid' : 'Base'} panel .dxf</button>`).join('')}</div></div>${showsDeep() ? '' : '-->'}
     </div>`;
+}
+function bindPrint() {
+  $('#cardBtn').onclick = () => openBuilderCard();
   $('#saveName').oninput = e => { state.name = e.target.value || 'My build'; };
   $('#saveBtn').onclick = () => download(slug() + '.casezero.json', JSON.stringify(snapshot(), null, 2), 'application/json');
   $('#openFile2').onchange = e => openFile(e.target.files[0]);
   $('#linkBtn').onclick = () => copyText(location.origin + location.pathname + '#b=' + btoa(unescape(encodeURIComponent(JSON.stringify(snapshot())))), 'Share link copied');
-  $$('[data-stl]').forEach(bt => bt.onclick = () => { const [kind, p] = bt.dataset.stl.split('-'); const f = heightMesh(kind === 'tray' ? trayShape(p) : panelShape(p)); download(`${slug()}-${state.body.size.toLowerCase()}-${p}-${kind === 'tray' ? 'shell' : 'panel'}.stl`, toSTL(`case_zero_${p}_${kind}`, f), 'model/stl'); });
+  $$('[data-stl]').forEach(bt => bt.onclick = () => {
+    if (bt.dataset.stl === 'fit-card') { download(`${slug()}-fit-test-card.stl`, toSTL('case_zero_fit_card', heightMesh(fitCardShape().regions)), 'model/stl'); return; }
+    const [kind, p] = bt.dataset.stl.split('-'); const f = heightMesh(kind === 'tray' ? trayShape(p) : panelShape(p)); download(`${slug()}-${state.body.size.toLowerCase()}-${p}-${kind === 'tray' ? 'shell' : 'panel'}.stl`, toSTL(`case_zero_${p}_${kind}`, f), 'model/stl'); });
   $$('[data-dxf]').forEach(bt => bt.onclick = () => download(`${slug()}-${state.body.size.toLowerCase()}-${bt.dataset.dxf}-panel.dxf`, toDXF(bt.dataset.dxf), 'application/dxf'));
 }
 const slug = () => (state.name || 'case-zero').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'case-zero';
@@ -1497,17 +1708,186 @@ function loadFromHash() {
   try { applySnapshot(JSON.parse(decodeURIComponent(escape(atob(m[1]))))); return true; } catch (e) { return false; }
 }
 
+/* ==========================================================================
+   PLAIN WORDS — "?" one-liners, the Learn page, and the Plain/Pro switch
+   ========================================================================== */
+function openQ(key) {
+  const g = GLOSS[key]; if (!g) return;
+  const pop = $('#qpop'), card = pop.querySelector('.qCard');
+  card.innerHTML = `${art('learn-' + key, g.t)}<h3>${esc(g.t)}</h3><p>${esc(g.s)}</p>
+    <div class="row"><button class="btn small primary" id="qMore">More in Learn</button><button class="btn small ghost" id="qClose">Got it</button></div>`;
+  pop.hidden = false; requestAnimationFrame(() => pop.classList.add('open'));
+  const close = () => { pop.classList.remove('open'); setTimeout(() => { pop.hidden = true; }, 220); };
+  $('#qClose').onclick = close; pop.querySelector('.qBack').onclick = close;
+  $('#qMore').onclick = () => { close(); openLearn(g.learn); };
+}
+document.addEventListener('click', e => { const q = e.target.closest('[data-q]'); if (!q) return; e.preventDefault(); e.stopPropagation(); openQ(q.dataset.q); });
+
+function demoLoop() {
+  return `<div class="demo" id="demoLoop"><svg viewBox="0 0 320 150" class="loopSvg">
+      <path class="track" id="loopPath" d="M60 40 H260 V110 H60 Z"/>
+      <path class="track flow" d="M60 40 H260 V110 H60 Z"/>
+      <rect x="36" y="58" width="48" height="34" rx="5" class="bat"/><text x="60" y="80" text-anchor="middle" class="dl">+  −</text>
+      <circle cx="260" cy="75" r="16" class="bulb"/><text x="260" y="128" text-anchor="middle" class="dl">light</text>
+      <g class="gap"><rect x="146" y="102" width="30" height="16" class="gapBg"/><line x1="146" y1="110" x2="176" y2="98" class="sw"/></g>
+      <text x="60" y="28" text-anchor="middle" class="dl">power</text><text x="160" y="140" text-anchor="middle" class="dl">ground: the way home</text>
+    </svg><button class="btn small" id="loopBtn">Break the loop</button><p class="small" id="loopTxt">The loop is closed, so electricity flows and the light is on.</p></div>`;
+}
+function demoDimmer() {
+  return `<div class="demo two"><div><div class="eyebrow">On/off (a button)</div><button class="btn small" id="dmSw">Press</button><div class="lamp" id="lampA"></div><p class="small">Only two choices.</p></div>
+    <div><div class="eyebrow">Dial (a knob)</div><input type="range" min="0" max="100" value="40" id="dmDial"><div class="lamp" id="lampB"></div><p class="small" id="dmVal">40%</p></div></div>`;
+}
+function openLearn(section) {
+  const L = $('#learn');
+  $('#learnBody').innerHTML = `
+    <nav class="lNav">${LEARN.map(x => `<a href="#" data-sec="${x.id}">${esc(x.title)}</a>`).join('')}<a href="#" data-sec="words">Words you'll see</a></nav>
+    ${LEARN.map(x => `<section class="lSec" id="l-${x.id}">${art('learn-' + x.id, x.title)}<h2>${esc(x.title)}</h2>${x.body.map(t => `<p>${t}</p>`).join('')}${x.demo === 'loop' ? demoLoop() : x.demo === 'dimmer' ? demoDimmer() : ''}</section>`).join('')}
+    <section class="lSec" id="l-words"><h2>Words you'll see</h2><dl class="words">${Object.values(GLOSS).map(g => `<dt>${esc(g.t)}</dt><dd>${esc(g.s)}</dd>`).join('')}</dl></section>`;
+  L.hidden = false; document.body.classList.add('inMode');
+  try { history.pushState({ learn: 1 }, ''); } catch (e) { }
+  requestAnimationFrame(() => { L.classList.add('open'); if (section) { const el = $('#l-' + section); if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 320); } });
+  $$('.lNav a').forEach(a => a.onclick = e => { e.preventDefault(); $('#l-' + a.dataset.sec)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  const lb = $('#loopBtn'); if (lb) { let open = false; lb.onclick = () => { open = !open; $('#demoLoop').classList.toggle('broken', open); lb.textContent = open ? 'Close the loop' : 'Break the loop'; $('#loopTxt').textContent = open ? 'The loop is broken. Nothing flows, so the light is off. A missing ground wire does exactly this.' : 'The loop is closed, so electricity flows and the light is on.'; }; }
+  const sw = $('#dmSw'); if (sw) { let on = false; sw.onclick = () => { on = !on; $('#lampA').style.setProperty('--lv', on ? 1 : 0); sw.textContent = on ? 'Press again' : 'Press'; }; }
+  const dial = $('#dmDial'); if (dial) { const set = () => { $('#lampB').style.setProperty('--lv', dial.value / 100); $('#dmVal').textContent = dial.value + '%'; }; dial.oninput = set; set(); }
+}
+function closeLearn(fromPop) {
+  const L = $('#learn'); if (L.hidden) return;
+  L.classList.remove('open'); if (!ui.mode) document.body.classList.remove('inMode');
+  if (!fromPop && history.state?.learn) { try { history.back(); } catch (e) { } }
+  setTimeout(() => { L.hidden = true; }, 300);
+}
+window.addEventListener('popstate', () => { if (!$('#learn').hidden) closeLearn(true); });
+$('#learnBtn').onclick = () => openLearn();
+$('#learnExit').onclick = () => closeLearn();
+/* ==========================================================================
+   LEVELS — pick your level like a game difficulty
+   ========================================================================== */
+function syncLevel() { const L = LEVELS.find(x => x.id === lvl()); $('#lvlBtn').textContent = L.name; document.body.dataset.level = lvl(); }
+function openLevels(first) {
+  const o = $('#lvl');
+  $('#lvlGrid').innerHTML = LEVELS.map((L, i) => `<button class="lvlCard ${L.id === levelId ? 'on' : ''}" data-l="${L.id}" style="--d:${i * 60}ms">
+    <span class="lvlBars">${[1, 2, 3, 4, 5].map(n => `<i class="${n <= i + 1 ? 'on' : ''}"></i>`).join('')}</span>
+    <span class="lvlName">${L.name}</span><span class="lvlLine">${esc(L.line)}</span><span class="lvlGets">${esc(L.gets)}</span></button>`).join('');
+  o.hidden = false; document.body.classList.add('inMode');
+  requestAnimationFrame(() => o.classList.add('open'));
+  $$('.lvlCard').forEach(b => b.onclick = () => {
+    levelId = b.dataset.l; store.set('cz-level', levelId); syncLevel();
+    $$('.lvlCard').forEach(x => x.classList.toggle('on', x === b));
+    setTimeout(() => { o.classList.remove('open'); if (!ui.mode) document.body.classList.remove('inMode'); setTimeout(() => { o.hidden = true; }, 300); RENDER[state.step]?.(); if (!first) toast(`Level: ${LEVELS.find(x => x.id === levelId).name}`); }, 260);
+  });
+}
+$('#lvlBtn').onclick = () => openLevels(false);
+syncLevel();
+
+/* ==========================================================================
+   BUILD METER — fills up as the build gets ready, then celebrates
+   ========================================================================== */
+function readiness() {
+  const has = state.bench.some(i => ['senses', 'limbs'].includes(trayInfo(i)?.role));
+  const plan = pinPlan(), body = bodyIssues(plan);
+  const checks = [
+    { label: 'Add a sense or a limb to the workbench', ok: has, step: 'circuit' },
+    { label: 'The brain has a doorway for every part', ok: has && !plan.issues.some(i => i.level === 'err'), step: 'circuit' },
+    { label: 'Every panel part has a spot on the body', ok: has && !benchFP().some(i => !placementOf(i.bid)), step: 'body' },
+    { label: 'Everything fits inside the body', ok: has && !body.some(i => i.level === 'err'), step: 'body' },
+    { label: 'Look over your test code', ok: !!state.seen?.proto, step: 'proto' },
+    { label: 'Check your parts list', ok: !!state.seen?.parts, step: 'parts' }
+  ];
+  return { checks, pct: Math.round(checks.filter(c => c.ok).length / checks.length * 100) };
+}
+function updateMeter() {
+  if (!state.preset) { $('#meterBtn').style.visibility = 'hidden'; return; }
+  const r = readiness(), b = $('#meterBtn');
+  b.style.visibility = 'visible';
+  b.querySelector('.mBar i').style.width = r.pct + '%'; b.querySelector('.mPct').textContent = r.pct + '%';
+  b.classList.toggle('full', r.pct === 100);
+  if (r.pct === 100 && !state.celebrated) { state.celebrated = true; const st = state; setTimeout(() => { if (state === st && !ui.mode && $('#lvl').hidden) celebrate(); }, 350); }
+}
+function openMeter() {
+  const r = readiness(), pop = $('#qpop'), card = pop.querySelector('.qCard');
+  card.innerHTML = `<div class="eyebrow">Build meter</div><h3>${r.pct === 100 ? 'Your build is ready' : `Your build is ${r.pct}% ready`}</h3>
+    <div class="progress big"><i style="width:${r.pct}%"></i></div>
+    <ul class="meterList">${r.checks.map(c => `<li class="${c.ok ? 'ok' : ''}"><span class="tick"></span>${esc(c.label)}${c.ok ? '' : `<button class="btn small ghost" data-goto="${c.step}">Go</button>`}</li>`).join('')}</ul>
+    <div class="row"><button class="btn small primary" id="cardBtn2">${r.pct === 100 ? 'Get your builder card' : 'Preview your builder card'}</button><button class="btn small ghost" id="qClose">Close</button></div>`;
+  pop.hidden = false; requestAnimationFrame(() => pop.classList.add('open'));
+  const close = () => { pop.classList.remove('open'); setTimeout(() => { pop.hidden = true; }, 220); };
+  $('#qClose').onclick = close; pop.querySelector('.qBack').onclick = close;
+  $$('[data-goto]').forEach(b => b.onclick = () => { close(); if (ui.mode) exitMode(); go(b.dataset.goto); });
+  $('#cardBtn2').onclick = () => { close(); openBuilderCard(); };
+}
+$('#meterBtn').onclick = openMeter;
+function confetti() {
+  const cv = $('#confetti'), c = cv.getContext('2d'); cv.hidden = false;
+  cv.width = innerWidth * devicePixelRatio; cv.height = innerHeight * devicePixelRatio; c.scale(devicePixelRatio, devicePixelRatio);
+  const cols = ['#4b5a2a', '#c9bb8e', '#2d4a73', '#a8552c', '#f3c77a'], P = [...Array(140)].map(() => ({ x: innerWidth / 2 + (Math.random() - .5) * 80, y: innerHeight * .35, vx: (Math.random() - .5) * 13, vy: -Math.random() * 13 - 4, r: Math.random() * 6.28, vr: (Math.random() - .5) * .4, s: 5 + Math.random() * 6, c: cols[Math.floor(Math.random() * cols.length)] }));
+  let f = 0;
+  const step = () => { c.clearRect(0, 0, innerWidth, innerHeight); P.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += .35; p.vx *= .99; p.r += p.vr; c.save(); c.translate(p.x, p.y); c.rotate(p.r); c.fillStyle = p.c; c.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); c.restore(); }); if (++f < 120) requestAnimationFrame(step); else cv.hidden = true; };
+  step();
+}
+function celebrate() {
+  confetti(); if (navigator.vibrate) try { navigator.vibrate([20, 40, 20]); } catch (e) { }
+  const pop = $('#qpop'), card = pop.querySelector('.qCard');
+  card.innerHTML = `<div class="eyebrow">Build meter 100%</div><h3>${esc(state.name)} is ready to build</h3>
+    <p>Every part has a spot, the brain has room for everything, and your files are ready. You earned your Nociv builder card.</p>
+    <div class="row"><button class="btn primary" id="cardBtn3">Get my builder card</button><button class="btn ghost" id="qClose">Keep going</button></div>`;
+  pop.hidden = false; requestAnimationFrame(() => pop.classList.add('open'));
+  const close = () => { pop.classList.remove('open'); setTimeout(() => { pop.hidden = true; }, 220); };
+  $('#qClose').onclick = close; pop.querySelector('.qBack').onclick = close;
+  $('#cardBtn3').onclick = () => { close(); openBuilderCard(); };
+}
+
+/* ==========================================================================
+   BUILDER CARD — uses the shared Nociv card (nociv-card.js)
+   ========================================================================== */
+function panelPicture() {
+  const s = size(), W = s.cols * CELL, H = s.rows * CELL, k = 3, cv = document.createElement('canvas'), c = cv.getContext('2d');
+  cv.width = (W + 8) * k; cv.height = (H + 8) * k; c.scale(k, k); c.translate(4, 4);
+  c.fillStyle = '#5d6f34'; c.fillRect(-4, -4, W + 8, H + 8); c.fillStyle = '#e9e4d4'; c.fillRect(0, 0, W, H);
+  const col = { senses: '#4b5a2a', limbs: '#a8552c', heart: '#a63d32', brain: '#2d4a73' };
+  for (const pl of state.panels.base) {
+    const role = COMP[FP[pl.fp].bom[0][0]].role;
+    for (const cut of cutsFor(pl.fp, pl.rot)) {
+      const pts = shapePoly(cut); c.beginPath(); pts.forEach(([x, y], i) => { const X = x + pl.x * CELL, Y = y + pl.y * CELL; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.closePath();
+      c.fillStyle = COMP[FP[pl.fp].bom[0][0]].sim === 'screen' ? '#1b2430' : col[role] || '#6b7078'; c.fill();
+    }
+  }
+  return cv.toDataURL('image/png');
+}
+function devicePicture() {
+  if (!window.THREE) return Promise.resolve(panelPicture());
+  return new Promise(res => {
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-9999px;top:0;width:520px;height:360px'; document.body.appendChild(host);
+    try { const v = build3D(host, { once: true }); res(v.url); } catch (e) { res(panelPicture()); }
+    host.remove();
+  });
+}
+async function openBuilderCard() {
+  ensureLayout();
+  const { lines } = bom(), P = priceBom(lines), b = board(), sk = skillFor(lines, b);
+  const batId = BATTERIES[state.body.battery].comps[0];
+  const n = state.bench.length;
+  NocivCard.open({ tool: 'Case Zero', toolKey: 'case-zero', buildName: state.name, level: LEVELS.find(x => x.id === lvl()).name,
+    stats: [['Cost', money0(P.total)], ['Skill', sk.level], ['Parts', String(n)], ['Power', batId ? 'Battery' : 'USB']],
+    deviceImage: await devicePicture(), theme: { bg1: '#1f3350', bg2: '#2d4a73', accent: '#c9bb8e', ink: '#ffffff' } });
+}
+
 /* ---------- navigation with smooth transitions ---------- */
-const RENDER = { make: renderMake, circuit: renderCircuit, body: renderBody, sim: renderSim, parts: renderParts, proto: renderProto, save: renderSave };
+const RENDER = { make: renderMake, circuit: renderCircuit, body: renderBody, parts: renderParts, proto: renderProto };
 function go(step) {
+  if (step === 'save') { state.costTab = 'print'; step = 'parts'; }
+  if (!RENDER[step]) step = step === 'sim' ? 'proto' : 'parts';
   if (step !== 'make' && !state.preset) selectPresetSilent('scratch');
   const from = STEPS.findIndex(s => s[0] === state.step), to = STEPS.findIndex(s => s[0] === step);
   state.step = step;
+  if (view3d && step !== 'body') { view3d.stop(); view3d = null; }
   $$('.view').forEach(v => v.classList.remove('active', 'fwd', 'back'));
   RENDER[step]();
   const view = $('#v-' + step); void view.offsetWidth;
   view.classList.add('active', to >= from ? 'fwd' : 'back');
   renderSteps();
+  if (['proto', 'parts'].includes(step)) { state.seen = state.seen || {}; state.seen[step] = true; }
+  updateMeter();
   $('#backBtn').style.visibility = to === 0 ? 'hidden' : 'visible';
   $('#nextBtn').style.visibility = to === STEPS.length - 1 ? 'hidden' : 'visible';
   if (to < STEPS.length - 1) $('#nextBtn').textContent = `Next: ${STEPS[to + 1][1]}`;
@@ -1517,3 +1897,4 @@ $('#backBtn').onclick = () => { const i = STEPS.findIndex(s => s[0] === state.st
 $('#nextBtn').onclick = () => { const i = STEPS.findIndex(s => s[0] === state.step); if (i < STEPS.length - 1) go(STEPS[i + 1][0]); };
 let rsT; window.addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(() => { if (ui.mode) renderMode(); }, 120); });
 go(loadFromHash() ? 'body' : 'make');
+if (!levelId) setTimeout(() => openLevels(true), 300);
